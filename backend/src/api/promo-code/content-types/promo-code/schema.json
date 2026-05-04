@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "promo_codes",
+  "info": {
+    "singularName": "promo-code",
+    "pluralName": "promo-codes",
+    "displayName": "Promo Code",
+    "description": "Discount promo codes"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "code": {
+      "type": "string",
+      "unique": true,
+      "required": true
+    },
+    "label": {
+      "type": "string"
+    },
+    "percentageDiscount": {
+      "type": "integer",
+      "min": 1,
+      "max": 100,
+      "required": true
+    },
+    "minOrderAmount": {
+      "type": "integer",
+      "min": 0,
+      "default": 0
+    },
+    "maxUses": {
+      "type": "integer",
+      "min": 0
+    },
+    "usedCount": {
+      "type": "integer",
+      "min": 0,
+      "default": 0
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "expiresAt": {
+      "type": "datetime"
+    }
+  }
+}
