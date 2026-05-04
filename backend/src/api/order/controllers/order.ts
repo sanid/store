@@ -1,6 +1,9 @@
 import { factories } from '@strapi/strapi';
+import { randomUUID } from 'crypto';
 import Stripe from 'stripe';
 import { sendShippingConfirmationEmail } from '../services/email';
+import { buildProductionDataForOrder } from '../services/production';
+import { generateProductionPdf } from '../services/production-pdf';
 
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeKey ? new Stripe(stripeKey) : null;
@@ -21,11 +24,85 @@ function getShippingRate(country: string, subtotal: number): number {
   return SHIPPING_ZONES.international.rate;
 }
 
+function pricePieces(c: Record<string, unknown>): number {
+  const width = Number(c.width) || 200;
+  const height = Number(c.height) || 84;
+  const depth = Number(c.depth) || 40;
+  const columns = Number(c.columns) || 4;
+  const rows = Number(c.rows) || 2;
+  const doors = Array.isArray(c.doors) ? (c.doors as boolean[]) : [];
+  const backs = !!c.backs;
+  const finish = String(c.finish || 'color');
+  const base = String(c.base || 'legs');
+
+  const cubicCm = width * height * depth;
+  const priceBase = 39900;
+  const perCm3 = 0.18;
+  const cells = rows * columns;
+  const doorCount = doors.filter(Boolean).length;
+  const backsCost = backs ? cells * 1500 : 0;
+  const finishMul = finish === 'veneer' ? 1.35 : finish === 'plywood' ? 1.1 : 1;
+  const baseAdd = base === 'plinth' ? 4900 : 2900;
+  return Math.round(
+    (priceBase + cubicCm * perCm3 / 4 + cells * 1800 + doorCount * 2200 + backsCost + baseAdd) * finishMul
+  );
+}
+
 function calculatePriceAdjustment(
-  schema: { fields?: Array<{ id: string; type: string; options?: Array<{ value: string; priceModifier?: number }>; priceModifier?: Record<string, number> }> } | null,
+  schema: {
+    preset?: string;
+    pricingBase?: number;
+    pricingRules?: Array<{ field: string; type: string; rate: number }>;
+    fields?: Array<{
+      id: string;
+      type: string;
+      options?: Array<{ value: string; priceModifier?: number }>;
+      priceModifier?: Record<string, number>;
+      pricePerUnit?: number;
+    }>;
+  } | null,
   customization: Record<string, unknown> | null
 ): number {
-  if (!schema?.fields || !customization) return 0;
+  if (!customization) return 0;
+
+  if (schema?.preset === 'furniture') {
+    return pricePieces(customization);
+  }
+
+  if (!schema?.fields) return 0;
+
+  if (typeof schema.pricingBase === 'number' && schema.pricingBase > 0) {
+    let price = schema.pricingBase;
+
+    for (const rule of schema.pricingRules || []) {
+      const val = Number(customization[rule.field]) || 0;
+      if (rule.type === 'linear' && rule.rate) {
+        price += val * rule.rate;
+      }
+    }
+
+    for (const field of schema.fields) {
+      const val = customization[field.id];
+      if (val == null || val === '') continue;
+
+      if (field.type === 'select' && field.options) {
+        const selected = field.options.find((opt) => opt.value === String(val));
+        if (selected && typeof selected.priceModifier === 'number' && selected.priceModifier > 0) {
+          price += selected.priceModifier;
+        }
+      } else if (field.type === 'number' && field.pricePerUnit && typeof val === 'number') {
+        price += val * field.pricePerUnit;
+      } else if (field.priceModifier && field.priceModifier[String(val)]) {
+        const mod = field.priceModifier[String(val)];
+        if (typeof mod === 'number' && mod > 0) {
+          price += mod;
+        }
+      }
+    }
+
+    return price;
+  }
+
   let adjustment = 0;
   for (const field of schema.fields) {
     const val = customization[field.id];
@@ -36,6 +113,8 @@ function calculatePriceAdjustment(
       if (selected && typeof selected.priceModifier === 'number' && selected.priceModifier > 0) {
         adjustment += selected.priceModifier;
       }
+    } else if (field.type === 'number' && field.pricePerUnit && typeof val === 'number') {
+      adjustment += val * field.pricePerUnit;
     } else if (field.priceModifier && field.priceModifier[String(val)]) {
       const mod = field.priceModifier[String(val)];
       if (typeof mod === 'number' && mod > 0) {
@@ -80,16 +159,26 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
         totalPrice: number;
         quantity: number;
         customization: Record<string, unknown>;
+        previewImage?: string;
       }> = [];
       let subtotal = 0;
 
       for (const item of cartItems) {
-        const product = await strapi.documents('api::product.product').findOne({
+        let product = await strapi.documents('api::product.product').findOne({
           documentId: item.productId,
           populate: { image: true },
         });
 
         if (!product) {
+          product = await strapi.documents('api::product.product').findOne({
+            documentId: item.productId,
+            populate: { image: true },
+            status: 'draft',
+          });
+        }
+
+        if (!product) {
+          strapi.log.warn(`Product not found for documentId: ${item.productId}`);
           return ctx.badRequest('One or more products in your cart are unavailable');
         }
 
@@ -103,9 +192,18 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           product.customizationSchema,
           item.customization
         );
-        const unitAmount = product.price + serverAdjustment;
+        const schema = product.customizationSchema as { preset?: string; pricingBase?: number } | null;
+        const isFullPrice = schema?.preset === 'furniture' || (typeof schema?.pricingBase === 'number' && schema.pricingBase > 0);
+        const unitAmount = isFullPrice ? serverAdjustment : product.price + serverAdjustment;
         const lineTotal = unitAmount * qty;
         subtotal += lineTotal;
+
+        const previewImage =
+          typeof item.previewImage === 'string' &&
+          item.previewImage.startsWith('data:image/') &&
+          item.previewImage.length < 1_500_000
+            ? item.previewImage
+            : undefined;
 
         orderLines.push({
           productId: item.productId,
@@ -114,8 +212,17 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           totalPrice: unitAmount,
           quantity: qty,
           customization: item.customization || {},
+          previewImage,
         });
       }
+
+      const productionData = buildProductionDataForOrder(
+        orderLines.map((l) => ({
+          name: l.name,
+          quantity: l.quantity,
+          customization: l.customization,
+        }))
+      );
 
       const shippingCost = getShippingRate(shippingCountry.toUpperCase(), subtotal);
 
@@ -190,6 +297,8 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           },
           promoCode: appliedPromoCode,
           discountAmount,
+          productionData,
+          productionToken: randomUUID(),
         },
       });
 
@@ -357,6 +466,81 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
       strapi.log.error('Webhook signature verification failed:', err);
       ctx.status = 400;
       ctx.send({ error: 'Webhook Error' });
+    }
+  },
+
+  async generateProductionPdf(ctx: any) {
+    const { documentId } = ctx.params;
+    const queryToken = ctx.query?.token;
+
+    try {
+      const order = await strapi.documents('api::order.order').findOne({
+        documentId,
+        // include private fields
+        populate: '*',
+      });
+
+      if (!order) {
+        return ctx.notFound('Order not found');
+      }
+
+      const orderToken = (order as any).productionToken;
+      if (!orderToken || !queryToken || queryToken !== orderToken) {
+        return ctx.unauthorized('Invalid or missing production token');
+      }
+
+      const orderLines =
+        (order.items as Array<{
+          name: string;
+          quantity: number;
+          totalPrice: number;
+          customization?: Record<string, unknown>;
+          previewImage?: string;
+        }>) || [];
+
+      const stored = order.productionData as
+        | { items: any[]; hasFurniture: boolean }
+        | null
+        | undefined;
+
+      const production =
+        stored && stored.items && stored.items.length > 0
+          ? stored
+          : buildProductionDataForOrder(
+              orderLines.map((l) => ({
+                name: l.name,
+                quantity: l.quantity,
+                customization: l.customization,
+              }))
+            );
+
+      if (!production.items.length) {
+        return ctx.badRequest('This order has no furniture items to produce');
+      }
+
+      const pdf = await generateProductionPdf(
+        {
+          documentId: order.documentId,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          totalAmount: order.totalAmount,
+          currency: order.currency,
+          shippingAddress: order.shippingAddress as Record<string, unknown> | null,
+          items: orderLines,
+          createdAt: order.createdAt,
+        },
+        production.items
+      );
+
+      ctx.set('Content-Type', 'application/pdf');
+      ctx.set(
+        'Content-Disposition',
+        `attachment; filename="production-${documentId.slice(-12)}.pdf"`
+      );
+      ctx.body = pdf;
+    } catch (err: any) {
+      strapi.log.error('Production PDF generation failed:', err);
+      ctx.internalServerError('Failed to generate production PDF');
     }
   },
 

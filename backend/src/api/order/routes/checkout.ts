@@ -1,5 +1,3 @@
-import rateLimit from '../../middlewares/rateLimit';
-
 export default {
   routes: [
     {
@@ -8,7 +6,6 @@ export default {
       handler: 'order.createPaymentIntent',
       config: {
         auth: false,
-        middlewares: [rateLimit({ windowMs: 60 * 1000, max: 5 })],
       },
     },
     {
@@ -17,7 +14,6 @@ export default {
       handler: 'order.validatePromoCode',
       config: {
         auth: false,
-        middlewares: [rateLimit({ windowMs: 60 * 1000, max: 10 })],
       },
     },
     {
@@ -32,6 +28,14 @@ export default {
       method: 'PUT',
       path: '/orders/:documentId/tracking',
       handler: 'order.updateTracking',
+    },
+    {
+      method: 'GET',
+      path: '/orders/:documentId/production-pdf',
+      handler: 'order.generateProductionPdf',
+      config: {
+        auth: false,
+      },
     },
   ],
 };

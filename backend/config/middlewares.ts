@@ -22,6 +22,9 @@ const config: Core.Config.Middlewares = [
     name: 'strapi::body',
     config: {
       includeUnparsed: true,
+      jsonLimit: '10mb',
+      formLimit: '10mb',
+      textLimit: '10mb',
     },
   },
   'strapi::session',

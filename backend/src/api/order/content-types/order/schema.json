@@ -62,6 +62,10 @@
     },
     "trackingCarrier": {
       "type": "string"
+    },
+    "productionToken": {
+      "type": "string",
+      "private": true
     }
   }
 }
