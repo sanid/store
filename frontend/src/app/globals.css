@@ -79,3 +79,11 @@ body {
 @utility animation-delay-400 {
   animation-delay: 400ms;
 }
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
