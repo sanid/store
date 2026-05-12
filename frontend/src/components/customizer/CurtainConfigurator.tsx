@@ -63,7 +63,7 @@ const ACCESSORIES: { id: CurtainAccessory; label: string; surcharge: number }[] 
   { id: "glider-6mm", label: "Clic-Gleiter 6 mm", surcharge: ACCESSORY_PRICE["glider-6mm"] },
 ];
 
-export default function CurtainConfigurator() {
+export default function CurtainConfigurator({ initialFabricId }: { initialFabricId?: string } = {}) {
   const { addItem, setCartOpen } = useCart();
   const [config, setConfig] = useState<CurtainConfig>(defaultCurtainConfig);
   const [hydrated, setHydrated] = useState(false);
@@ -73,18 +73,23 @@ export default function CurtainConfigurator() {
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
 
   useEffect(() => {
+    let next: CurtainConfig | null = null;
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CurtainConfig;
-        if (parsed && parsed.fabricId && getFabric(parsed.fabricId)) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
-          setConfig(parsed);
-        }
+        if (parsed && parsed.fabricId && getFabric(parsed.fabricId)) next = parsed;
       }
     } catch {}
+    if (initialFabricId && getFabric(initialFabricId)) {
+      next = { ...(next ?? defaultCurtainConfig()), fabricId: initialFabricId };
+    }
+    if (next) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setConfig(next);
+    }
     setHydrated(true);
-  }, []);
+  }, [initialFabricId]);
 
   useEffect(() => {
     if (!hydrated) return;
