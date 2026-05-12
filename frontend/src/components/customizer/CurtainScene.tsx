@@ -188,35 +188,234 @@ function Rail({ widthM, heightM }: { widthM: number; heightM: number }) {
 }
 
 function Room({ widthM, heightM }: { widthM: number; heightM: number }) {
-  const wallW = Math.max(widthM + 2, 4);
-  const wallH = Math.max(heightM + 1, 3);
+  const wallW = Math.max(widthM + 2.4, 4.5);
+  const wallH = Math.max(heightM + 1.2, 3);
+  const winW = Math.min(widthM * 0.6, 1.7);
+  const winH = Math.min(heightM * 0.78, 1.9);
+  const winYCenter = heightM * 0.52;
+
   return (
     <group>
       {/* Back wall */}
-      <mesh position={[0, wallH / 2, -0.2]} receiveShadow>
+      <mesh position={[0, wallH / 2, -0.22]} receiveShadow>
         <planeGeometry args={[wallW, wallH]} />
-        <meshStandardMaterial color="#ede7dc" roughness={0.95} />
+        <meshStandardMaterial color="#ebe5d8" roughness={0.95} />
       </mesh>
-      {/* Window frame */}
-      <group position={[0, heightM / 2 + 0.05, -0.18]}>
-        <mesh>
-          <planeGeometry args={[Math.min(widthM * 0.55, 1.6), Math.min(heightM * 0.7, 1.6)]} />
-          <meshStandardMaterial color="#b9d6e5" />
-        </mesh>
-        <mesh position={[0, 0, 0.005]}>
-          <boxGeometry args={[Math.min(widthM * 0.55, 1.6) + 0.06, 0.04, 0.02]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[0, -Math.min(heightM * 0.7, 1.6) / 2 - 0.02, 0.005]}>
-          <boxGeometry args={[Math.min(widthM * 0.55, 1.6) + 0.06, 0.04, 0.02]} />
-          <meshStandardMaterial color="#ffffff" />
-        </mesh>
-      </group>
-      {/* Floor */}
-      <mesh position={[0, 0, 0.4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[wallW, 2]} />
-        <meshStandardMaterial color="#dcd2c2" roughness={0.9} />
+
+      {/* Faint baseboard moulding */}
+      <mesh position={[0, 0.06, -0.215]}>
+        <boxGeometry args={[wallW, 0.12, 0.008]} />
+        <meshStandardMaterial color="#f6f2ea" roughness={0.7} />
       </mesh>
+
+      <EuropeanWindow widthM={winW} heightM={winH} y={winYCenter} />
+
+      {/* Floor — warm oak */}
+      <mesh position={[0, 0, 0.45]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[wallW, 2.2]} />
+        <meshStandardMaterial color="#b89b78" roughness={0.85} />
+      </mesh>
+      {/* Plank lines */}
+      {Array.from({ length: 8 }).map((_, i) => (
+        <mesh
+          key={i}
+          position={[0, 0.001, -0.5 + i * 0.32]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[wallW, 0.005]} />
+          <meshBasicMaterial color="#8b6f4f" transparent opacity={0.35} />
+        </mesh>
+      ))}
+
+      {/* Side decor — only render if the rail is wide enough */}
+      {widthM > 1.4 && <ConsoleTable x={-Math.max(widthM / 2 + 0.45, 1.4)} />}
+      {widthM > 1.8 && <FloorLamp x={Math.max(widthM / 2 + 0.55, 1.7)} />}
+    </group>
+  );
+}
+
+function EuropeanWindow({
+  widthM,
+  heightM,
+  y,
+}: {
+  widthM: number;
+  heightM: number;
+  y: number;
+}) {
+  const frame = "#f4ede0";
+  const frameDeep = "#d8cdb8";
+  const z = -0.2;
+  const depth = 0.06;
+  const frameT = 0.05; // outer frame thickness
+  const muntinT = 0.025;
+
+  // Two casement sashes, each split into 3 panes vertically (typical EU window).
+  const sashGap = 0.015;
+  const sashW = (widthM - frameT * 2 - sashGap) / 2;
+  const sashH = heightM - frameT * 2;
+
+  return (
+    <group position={[0, y, z]}>
+      {/* Reveal — recessed sky panel */}
+      <mesh position={[0, 0, -depth - 0.005]}>
+        <planeGeometry args={[widthM, heightM]} />
+        <meshBasicMaterial color="#c8d8df" />
+      </mesh>
+      {/* Soft outdoor gradient via two stacked planes */}
+      <mesh position={[0, heightM * 0.25, -depth - 0.004]}>
+        <planeGeometry args={[widthM, heightM * 0.5]} />
+        <meshBasicMaterial color="#e6eef2" transparent opacity={0.65} />
+      </mesh>
+      <mesh position={[0, -heightM * 0.18, -depth - 0.004]}>
+        <planeGeometry args={[widthM, heightM * 0.55]} />
+        <meshBasicMaterial color="#a4c0aa" transparent opacity={0.55} />
+      </mesh>
+      {/* Distant trees silhouette */}
+      <mesh position={[0, -heightM * 0.05, -depth - 0.003]}>
+        <planeGeometry args={[widthM, heightM * 0.3]} />
+        <meshBasicMaterial color="#7a9a82" transparent opacity={0.5} />
+      </mesh>
+
+      {/* Outer frame — 4 strips */}
+      <mesh position={[0, heightM / 2 - frameT / 2, 0]}>
+        <boxGeometry args={[widthM, frameT, depth]} />
+        <meshStandardMaterial color={frame} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, -heightM / 2 + frameT / 2, 0]}>
+        <boxGeometry args={[widthM, frameT, depth]} />
+        <meshStandardMaterial color={frame} roughness={0.6} />
+      </mesh>
+      <mesh position={[-widthM / 2 + frameT / 2, 0, 0]}>
+        <boxGeometry args={[frameT, heightM, depth]} />
+        <meshStandardMaterial color={frame} roughness={0.6} />
+      </mesh>
+      <mesh position={[widthM / 2 - frameT / 2, 0, 0]}>
+        <boxGeometry args={[frameT, heightM, depth]} />
+        <meshStandardMaterial color={frame} roughness={0.6} />
+      </mesh>
+
+      {/* Center mullion (Stulp) — splits the two sashes */}
+      <mesh position={[0, 0, 0.005]}>
+        <boxGeometry args={[muntinT * 1.2, sashH, depth - 0.01]} />
+        <meshStandardMaterial color={frame} roughness={0.6} />
+      </mesh>
+
+      {/* Two horizontal transoms — one per sash, ~upper third */}
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * (widthM / 4 + (side > 0 ? sashGap / 2 : -sashGap / 2)), 0, 0]}>
+          <mesh position={[0, sashH * 0.18, 0.005]}>
+            <boxGeometry args={[sashW, muntinT, depth - 0.01]} />
+            <meshStandardMaterial color={frame} roughness={0.6} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Handles (Olive) */}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[side * (muntinT * 1.4), 0, depth / 2 + 0.005]}
+          rotation={[0, 0, side > 0 ? -Math.PI / 8 : Math.PI / 8]}
+        >
+          <boxGeometry args={[0.025, 0.08, 0.012]} />
+          <meshStandardMaterial color="#cfb277" metalness={0.7} roughness={0.35} />
+        </mesh>
+      ))}
+
+      {/* Subtle frame shadow inside */}
+      <mesh position={[0, 0, -depth + 0.001]}>
+        <planeGeometry args={[widthM - frameT * 2, heightM - frameT * 2]} />
+        <meshBasicMaterial color={frameDeep} transparent opacity={0.18} />
+      </mesh>
+
+      {/* Window sill (Fensterbank) — protrudes inward */}
+      <mesh
+        position={[0, -heightM / 2 - 0.02, 0.08]}
+        castShadow
+        receiveShadow
+      >
+        <boxGeometry args={[widthM + 0.16, 0.04, 0.22]} />
+        <meshStandardMaterial color="#f1ead9" roughness={0.7} />
+      </mesh>
+      {/* Sill front edge highlight */}
+      <mesh position={[0, -heightM / 2 - 0.041, 0.19]}>
+        <boxGeometry args={[widthM + 0.16, 0.005, 0.005]} />
+        <meshStandardMaterial color="#d8cdb8" />
+      </mesh>
+    </group>
+  );
+}
+
+function ConsoleTable({ x }: { x: number }) {
+  const topY = 0.78;
+  return (
+    <group position={[x, 0, 0.18]}>
+      {/* Top */}
+      <mesh position={[0, topY, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.55, 0.025, 0.32]} />
+        <meshStandardMaterial color="#3a312a" roughness={0.4} metalness={0.05} />
+      </mesh>
+      {/* Legs — slim brass */}
+      {[
+        [-0.24, 0.13],
+        [0.24, 0.13],
+        [-0.24, -0.13],
+        [0.24, -0.13],
+      ].map(([lx, lz], i) => (
+        <mesh key={i} position={[lx, topY / 2, lz]} castShadow>
+          <cylinderGeometry args={[0.012, 0.012, topY, 12]} />
+          <meshStandardMaterial color="#b08a4a" metalness={0.85} roughness={0.25} />
+        </mesh>
+      ))}
+      {/* Decor: ceramic vase */}
+      <mesh position={[-0.12, topY + 0.11, 0]} castShadow>
+        <cylinderGeometry args={[0.055, 0.04, 0.18, 24]} />
+        <meshStandardMaterial color="#e9e0cf" roughness={0.7} />
+      </mesh>
+      {/* Stem */}
+      <mesh position={[-0.12, topY + 0.28, 0]}>
+        <cylinderGeometry args={[0.004, 0.004, 0.22, 6]} />
+        <meshStandardMaterial color="#5a6b3e" roughness={0.8} />
+      </mesh>
+      {/* Leaf */}
+      <mesh position={[-0.105, topY + 0.36, 0.02]} rotation={[0, 0, 0.6]}>
+        <sphereGeometry args={[0.045, 12, 10]} />
+        <meshStandardMaterial color="#6e8a4a" roughness={0.8} />
+      </mesh>
+      {/* Stack of two books */}
+      <mesh position={[0.13, topY + 0.022, 0]} castShadow>
+        <boxGeometry args={[0.16, 0.025, 0.11]} />
+        <meshStandardMaterial color="#7a3c2a" roughness={0.6} />
+      </mesh>
+      <mesh position={[0.135, topY + 0.05, 0.005]} castShadow rotation={[0, 0.08, 0]}>
+        <boxGeometry args={[0.15, 0.022, 0.105]} />
+        <meshStandardMaterial color="#2c3a4a" roughness={0.6} />
+      </mesh>
+    </group>
+  );
+}
+
+function FloorLamp({ x }: { x: number }) {
+  return (
+    <group position={[x, 0, 0.15]}>
+      {/* Marble base */}
+      <mesh position={[0, 0.025, 0]} castShadow>
+        <cylinderGeometry args={[0.13, 0.14, 0.05, 24]} />
+        <meshStandardMaterial color="#dcd4c3" roughness={0.5} />
+      </mesh>
+      {/* Slim brass stem */}
+      <mesh position={[0, 0.85, 0]} castShadow>
+        <cylinderGeometry args={[0.008, 0.008, 1.6, 12]} />
+        <meshStandardMaterial color="#b08a4a" metalness={0.85} roughness={0.25} />
+      </mesh>
+      {/* Lampshade — linen drum */}
+      <mesh position={[0, 1.62, 0]} castShadow>
+        <cylinderGeometry args={[0.16, 0.18, 0.24, 24, 1, true]} />
+        <meshStandardMaterial color="#efe5cf" roughness={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Warm glow under shade */}
+      <pointLight position={[0, 1.6, 0]} intensity={0.35} distance={1.4} color="#ffd9a8" />
     </group>
   );
 }
