@@ -1,6 +1,7 @@
 "use client";
 
 import { Link } from "@/i18n/routing";
+import Image from "next/image";
 
 export default function Footer() {
   return (
@@ -8,12 +9,13 @@ export default function Footer() {
       <div className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="font-serif text-lg font-light tracking-[0.3em] text-white">
-              UNIQUE FACTORY
-            </div>
-            <div className="mt-1 text-[10px] font-medium tracking-[0.35em] text-stone-500">
-              BERLIN
-            </div>
+            <Image
+              src="/logo.svg"
+              alt="Unique Factory Berlin"
+              width={292}
+              height={38}
+              className="h-7 w-auto"
+            />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-stone-400">
               Manufaktur für maßgefertigte Vorhänge — entworfen, gefertigt und
               montiert in Berlin.

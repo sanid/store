@@ -3,6 +3,7 @@
 import { Link, usePathname } from "@/i18n/routing";
 import { useCart } from "@/context/CartContext";
 import { useState } from "react";
+import Image from "next/image";
 
 export default function Navbar() {
   const { totalItems, setCartOpen } = useCart();
@@ -25,16 +26,15 @@ export default function Navbar() {
           </div>
 
           {/* Center: brand */}
-          <Link
-            href="/"
-            className="mx-auto flex flex-col items-center leading-none"
-          >
-            <span className="font-serif text-2xl font-light tracking-[0.32em] text-white sm:text-[26px]">
-              UNIQUE FACTORY
-            </span>
-            <span className="mt-1.5 text-[10px] font-medium tracking-[0.35em] text-stone-400">
-              BERLIN
-            </span>
+          <Link href="/" aria-label="Unique Factory Berlin" className="mx-auto block">
+            <Image
+              src="/logo.svg"
+              alt="Unique Factory Berlin"
+              width={292}
+              height={38}
+              priority
+              className="h-7 w-auto sm:h-8"
+            />
           </Link>
 
           {/* Right: kontakt + locale + cart */}
