@@ -203,34 +203,20 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl border border-stone-200 p-4">
-              <div>
-                <Label>Breite</Label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={40}
-                    max={600}
-                    value={config.width}
-                    onChange={(e) => update("width", Math.max(40, Math.min(600, Number(e.target.value) || 0)))}
-                    className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-stone-900 focus:outline-none"
-                  />
-                  <span className="text-xs text-stone-500">cm</span>
-                </div>
-              </div>
-              <div>
-                <Label>Höhe</Label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={40}
-                    max={400}
-                    value={config.height}
-                    onChange={(e) => update("height", Math.max(40, Math.min(400, Number(e.target.value) || 0)))}
-                    className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-stone-900 focus:outline-none"
-                  />
-                  <span className="text-xs text-stone-500">cm</span>
-                </div>
-              </div>
+              <DimensionInput
+                label="Breite"
+                value={config.width}
+                min={40}
+                max={600}
+                onCommit={(v) => update("width", v)}
+              />
+              <DimensionInput
+                label="Höhe"
+                value={config.height}
+                min={40}
+                max={400}
+                onCommit={(v) => update("height", v)}
+              />
             </div>
           </NumberedStep>
 
@@ -446,5 +432,61 @@ function CardOption({
         <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-stone-900 text-[10px] text-white">✓</span>
       )}
     </button>
+  );
+}
+
+function DimensionInput({
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (v: number) => void;
+}) {
+  const [raw, setRaw] = useState(String(value));
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRaw(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) {
+      setRaw(String(value));
+      return;
+    }
+    const clamped = Math.max(min, Math.min(max, Math.round(n)));
+    setRaw(String(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={min}
+          max={max}
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            }
+          }}
+          className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-stone-900 focus:outline-none"
+        />
+        <span className="text-xs text-stone-500">cm</span>
+      </div>
+    </div>
   );
 }
