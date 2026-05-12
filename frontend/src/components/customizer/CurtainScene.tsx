@@ -21,17 +21,16 @@ function curtainGeometry(
   header: CurtainHeader
 ): THREE.BufferGeometry {
   const fullness = RESERVE_FACTOR[reserve];
-  // The actual fabric is wider than the displayed panel — pleating compresses it.
-  // Visually we keep the panel width as 'widthM' and use the fullness to determine fold count + amplitude.
-  const segments = Math.max(40, Math.min(160, Math.round(widthM * 60 * fullness)));
-  const geo = new THREE.PlaneGeometry(widthM, heightM, segments, 12);
+  // Dense mesh so folds read as soft fabric rather than ribbed strips.
+  const segments = Math.max(80, Math.min(240, Math.round(widthM * 110 * fullness)));
+  const geo = new THREE.PlaneGeometry(widthM, heightM, segments, 24);
   const pos = geo.attributes.position;
-  // Frequency: more fullness => more folds.
-  const foldsPerMeter = 4 * fullness;
-  const totalFolds = foldsPerMeter * widthM;
+  // Fewer, wider folds — looks more like real pleated curtain.
+  const foldsPerMeter = 2.6 * fullness;
+  const totalFolds = Math.max(2, Math.round(foldsPerMeter * widthM));
   const k = (totalFolds * Math.PI * 2) / widthM;
-  // Amplitude grows slightly with fullness.
-  const baseAmp = 0.035 + 0.025 * (fullness - 1);
+  // Lower amplitude so folds look like soft waves rather than sharp ribbons.
+  const baseAmp = 0.022 + 0.018 * (fullness - 1);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const y = pos.getY(i);
@@ -188,11 +187,13 @@ function Rail({ widthM, heightM }: { widthM: number; heightM: number }) {
 }
 
 function Room({ widthM, heightM }: { widthM: number; heightM: number }) {
-  const wallW = Math.max(widthM + 2.4, 4.5);
-  const wallH = Math.max(heightM + 1.2, 3);
-  const winW = Math.min(widthM * 0.6, 1.7);
-  const winH = Math.min(heightM * 0.78, 1.9);
-  const winYCenter = heightM * 0.52;
+  // Always render a sizeable room regardless of curtain width.
+  const wallW = Math.max(widthM + 4.5, 6);
+  const wallH = Math.max(heightM + 1.4, 3.2);
+  // Window roughly matches the rail, with a small inset so the rail extends beyond it.
+  const winW = Math.max(0.9, Math.min(widthM - 0.1, 2.4));
+  const winH = Math.min(heightM * 0.82, heightM - 0.3);
+  const winYCenter = heightM * 0.5 + 0.08;
 
   return (
     <group>
@@ -202,34 +203,34 @@ function Room({ widthM, heightM }: { widthM: number; heightM: number }) {
         <meshStandardMaterial color="#ebe5d8" roughness={0.95} />
       </mesh>
 
-      {/* Faint baseboard moulding */}
-      <mesh position={[0, 0.06, -0.215]}>
-        <boxGeometry args={[wallW, 0.12, 0.008]} />
+      {/* Baseboard */}
+      <mesh position={[0, 0.06, -0.213]}>
+        <boxGeometry args={[wallW, 0.12, 0.012]} />
         <meshStandardMaterial color="#f6f2ea" roughness={0.7} />
       </mesh>
 
       <EuropeanWindow widthM={winW} heightM={winH} y={winYCenter} />
 
-      {/* Floor — warm oak */}
-      <mesh position={[0, 0, 0.45]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[wallW, 2.2]} />
+      {/* Floor — large warm oak plane */}
+      <mesh position={[0, 0, 1.4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[wallW + 2, 4]} />
         <meshStandardMaterial color="#b89b78" roughness={0.85} />
       </mesh>
-      {/* Plank lines */}
-      {Array.from({ length: 8 }).map((_, i) => (
+      {/* Plank seams running away from the wall */}
+      {Array.from({ length: 14 }).map((_, i) => (
         <mesh
           key={i}
-          position={[0, 0.001, -0.5 + i * 0.32]}
+          position={[-wallW / 2 + (i + 1) * (wallW / 15), 0.001, 1.4]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <planeGeometry args={[wallW, 0.005]} />
-          <meshBasicMaterial color="#8b6f4f" transparent opacity={0.35} />
+          <planeGeometry args={[0.004, 4]} />
+          <meshBasicMaterial color="#8b6f4f" transparent opacity={0.4} />
         </mesh>
       ))}
 
-      {/* Side decor — only render if the rail is wide enough */}
-      {widthM > 1.4 && <ConsoleTable x={-Math.max(widthM / 2 + 0.45, 1.4)} />}
-      {widthM > 1.8 && <FloorLamp x={Math.max(widthM / 2 + 0.55, 1.7)} />}
+      {/* Decor — always render */}
+      <ConsoleTable x={-(widthM / 2 + 0.8)} />
+      <FloorLamp x={widthM / 2 + 0.9} />
     </group>
   );
 }
@@ -439,7 +440,7 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
 
   return (
     <Canvas
-      camera={{ position: [0, heightM * 0.55, Math.max(2.8, railWidthM * 1.6) ], fov: 38 }}
+      camera={{ position: [0, heightM * 0.5, Math.max(3.4, railWidthM * 1.9)], fov: 48 }}
       shadows
       gl={{ preserveDrawingBuffer: true, antialias: true }}
     >
