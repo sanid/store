@@ -5,11 +5,11 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, RoundedBox, Text } from "@react-three/drei";
 import type * as THREE from "three";
 
+import type { CustomizationSchema } from "@/lib/types";
+
 interface Preview3DProps {
   customization: Record<string, unknown>;
-  schema: {
-    fields: { id: string; type: string; label: string; options?: string[] }[];
-  } | null;
+  schema: CustomizationSchema | null;
 }
 
 function findFieldValue(

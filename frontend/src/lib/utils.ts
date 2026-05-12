@@ -19,11 +19,152 @@ export function generateCartItemId(
   return `${documentId}__${sorted}`;
 }
 
+const FURNITURE_LABELS: Record<string, string> = {
+  style: "Stil",
+  width: "Breite",
+  height: "Höhe",
+  depth: "Tiefe",
+  columns: "Spalten",
+  rows: "Reihen",
+  base: "Basis",
+  backs: "Rückwände",
+  finish: "Finish",
+  color: "Farbe",
+  doors: "Türen",
+  cells: "Fächer",
+  density: "Dichte",
+};
+
+const FURNITURE_VALUES: Record<string, string> = {
+  frame: "Frame",
+  grid: "Grid",
+  gradient: "Gradient",
+  mosaic: "Mosaic",
+  pattern: "Pattern",
+  pixel: "Pixel",
+  legs: "Füße",
+  plinth: "Sockel",
+  plywood: "Multiplex",
+  veneer: "Furnier",
+  color: "Farbe",
+  door: "Tür",
+  drawer: "Schublade",
+  open: "Offen",
+};
+
+export interface CustomizationDisplayItem {
+  key: string;
+  label: string;
+  value: string;
+  swatch?: string;
+}
+
+export function formatCustomizationForDisplay(
+  customization: Record<string, unknown>
+): CustomizationDisplayItem[] {
+  const out: CustomizationDisplayItem[] = [];
+  for (const [key, raw] of Object.entries(customization)) {
+    if (raw === undefined || raw === null || raw === "") continue;
+    const label = FURNITURE_LABELS[key] ?? key;
+
+    if (key === "doors" && Array.isArray(raw)) {
+      const count = raw.filter(Boolean).length;
+      if (count === 0) continue;
+      out.push({ key, label, value: `${count}× geschlossen` });
+      continue;
+    }
+
+    if (key === "cells" && Array.isArray(raw)) {
+      const doors = raw.filter((c) => c === "door").length;
+      const drawers = raw.filter((c) => c === "drawer").length;
+      const open = raw.filter((c) => c === "open").length;
+      const parts: string[] = [];
+      if (doors) parts.push(`${doors} Tür${doors === 1 ? "" : "en"}`);
+      if (drawers) parts.push(`${drawers} Schublade${drawers === 1 ? "" : "n"}`);
+      if (open) parts.push(`${open} offen`);
+      out.push({ key, label, value: parts.join(" · ") || `${raw.length} Fächer` });
+      continue;
+    }
+
+    if (key === "density" && typeof raw === "number") {
+      out.push({ key, label, value: `${raw}%` });
+      continue;
+    }
+
+    if (key === "color" && typeof raw === "string" && raw.startsWith("#")) {
+      out.push({ key, label, value: raw, swatch: raw });
+      continue;
+    }
+
+    if (typeof raw === "boolean") {
+      out.push({ key, label, value: raw ? "Mit" : "Ohne" });
+      continue;
+    }
+
+    if (typeof raw === "number") {
+      const suffix = ["width", "height", "depth"].includes(key) ? " cm" : "";
+      out.push({ key, label, value: `${raw}${suffix}` });
+      continue;
+    }
+
+    if (Array.isArray(raw)) {
+      out.push({ key, label, value: `${raw.length} Optionen` });
+      continue;
+    }
+
+    const str = String(raw);
+    out.push({ key, label, value: FURNITURE_VALUES[str] ?? str });
+  }
+  return out;
+}
+
 export function calculatePriceAdjustment(
-  schema: { fields: { id: string; priceModifier?: Record<string, number> }[] } | null,
+  schema: {
+    pricingBase?: number;
+    pricingRules?: Array<{ field: string; type: string; rate: number }>;
+    fields: Array<{
+      id: string;
+      type?: string;
+      priceModifier?: Record<string, number>;
+      pricePerUnit?: number;
+      options?: Array<{ value: string; priceModifier?: number }> | string[];
+    }>;
+  } | null,
   customization: Record<string, unknown>
 ): number {
   if (!schema) return 0;
+
+  if (typeof schema.pricingBase === 'number' && schema.pricingBase > 0) {
+    let price = schema.pricingBase;
+
+    for (const rule of schema.pricingRules || []) {
+      const val = Number(customization[rule.field]) || 0;
+      if (rule.type === 'linear' && rule.rate) {
+        price += val * rule.rate;
+      }
+    }
+
+    for (const field of schema.fields) {
+      const val = customization[field.id];
+      if (val == null || val === '') continue;
+
+      if (field.type === 'select' && Array.isArray(field.options)) {
+        const opt = field.options.find((o) =>
+          typeof o === 'string' ? o === String(val) : o.value === String(val)
+        );
+        if (opt && typeof opt !== 'string' && typeof opt.priceModifier === 'number' && opt.priceModifier > 0) {
+          price += opt.priceModifier;
+        }
+      } else if (field.type === 'number' && field.pricePerUnit && typeof val === 'number') {
+        price += val * field.pricePerUnit;
+      } else if (field.priceModifier && field.priceModifier[String(val)]) {
+        price += field.priceModifier[String(val)];
+      }
+    }
+
+    return price;
+  }
+
   let adjustment = 0;
   for (const field of schema.fields) {
     if (field.priceModifier && customization[field.id]) {

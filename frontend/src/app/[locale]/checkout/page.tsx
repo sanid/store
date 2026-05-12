@@ -6,6 +6,7 @@ import {
   formatPrice,
   FREE_SHIPPING_THRESHOLD,
   getShippingRate,
+  formatCustomizationForDisplay,
 } from "@/lib/utils";
 import Image from "next/image";
 import { Link } from "@/i18n/routing";
@@ -99,6 +100,7 @@ export default function CheckoutPage() {
             quantity: item.quantity,
             customization: item.customization,
             customizationPriceAdjustment: item.customizationPriceAdjustment,
+            previewImage: item.image && item.image.startsWith("data:image") ? item.image : undefined,
           })),
           customerEmail: email,
           shippingCountry: shippingAddress.country,
@@ -492,54 +494,57 @@ function OrderSummary({
       <h2 className="mb-4 text-lg font-semibold text-primary">
         {t("orderSummary")}
       </h2>
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.cartItemId} className="flex items-center gap-3">
-            {item.image && (
-              <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-surface-dark">
-                <Image
-                  src={item.image}
-                  alt={item.name}
-                  fill
-                  sizes="48px"
-                  className="object-cover"
-                />
-                <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
-                  {item.quantity}
-                </span>
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-primary">
-                {item.name}
-              </p>
-              {item.customization &&
-                Object.keys(item.customization).length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(item.customization).map(([k, v]) => {
-                      if (!v || v === "") return null;
-                      return (
-                        <span key={k} className="text-[10px] text-muted">
-                          {k}:{" "}
-                          {String(v).startsWith("#") ? (
-                            <span
-                              className="inline-block h-2.5 w-2.5 rounded-sm align-middle"
-                              style={{ backgroundColor: String(v) }}
-                            />
-                          ) : (
-                            String(v)
-                          )}
-                        </span>
-                      );
-                    })}
+      <div className="space-y-4">
+        {items.map((item) => {
+          const specs = item.customization && Object.keys(item.customization).length > 0
+            ? formatCustomizationForDisplay(item.customization)
+            : [];
+          return (
+            <div key={item.cartItemId} className="rounded-lg border border-stone-200 bg-white">
+              <div className="flex items-start gap-3 px-3 py-3">
+                {item.image && (
+                  <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-md bg-surface-dark">
+                    <Image
+                      src={item.image}
+                      alt={item.name}
+                      fill
+                      sizes="56px"
+                      className="object-cover"
+                    />
+                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+                      {item.quantity}
+                    </span>
                   </div>
                 )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-primary">{item.name}</p>
+                  <p className="mt-0.5 text-xs text-muted">Menge · {item.quantity}</p>
+                </div>
+                <p className="flex-shrink-0 text-sm font-semibold text-primary">
+                  {formatPrice(item.totalPrice * item.quantity)}
+                </p>
+              </div>
+              {specs.length > 0 && (
+                <dl className="divide-y divide-stone-100 border-t border-stone-100 text-xs">
+                  {specs.map((it) => (
+                    <div key={it.key} className="flex items-center justify-between gap-3 px-3 py-1.5">
+                      <dt className="text-stone-500">{it.label}</dt>
+                      <dd className="flex items-center gap-1.5 font-medium text-stone-800">
+                        {it.swatch && (
+                          <span
+                            className="inline-block h-3 w-3 rounded-full border border-stone-300"
+                            style={{ backgroundColor: it.swatch }}
+                          />
+                        )}
+                        <span>{it.value}</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </div>
-            <p className="flex-shrink-0 text-sm font-semibold">
-              {formatPrice(item.totalPrice * item.quantity)}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="mt-4 space-y-2 border-t border-border pt-4">
         <div className="flex justify-between">

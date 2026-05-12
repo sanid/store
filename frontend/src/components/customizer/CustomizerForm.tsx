@@ -15,6 +15,10 @@ interface CustomizerFormProps {
   onCustomizationChange: (values: Record<string, unknown>, priceAdjustment: number) => void;
 }
 
+function getOptionValue(opt: string | import("@/lib/types").CustomizationFieldOption): string {
+  return typeof opt === "string" ? opt : opt.value;
+}
+
 function getDefaultValue(field: CustomizationField): unknown {
   if (field.default !== undefined) return field.default;
   switch (field.type) {
@@ -24,9 +28,9 @@ function getDefaultValue(field: CustomizationField): unknown {
     case "number":
       return field.min ?? 0;
     case "color":
-      return field.options?.[0] || "";
+      return field.options?.[0] ? getOptionValue(field.options[0]) : "";
     case "select":
-      return field.options?.[0] || "";
+      return field.options?.[0] ? getOptionValue(field.options[0]) : "";
     case "image":
       return "";
     default:

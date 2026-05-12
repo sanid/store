@@ -6,6 +6,7 @@ import { useCart } from "@/context/CartContext";
 import { getStrapiImageUrl } from "@/lib/strapi";
 import { formatPrice } from "@/lib/utils";
 import CustomizerForm from "@/components/customizer/CustomizerForm";
+import FurnitureConfigurator from "@/components/customizer/FurnitureConfigurator";
 import dynamic from "next/dynamic";
 
 const Preview3D = dynamic(() => import("@/components/customizer/Preview3D"), {
@@ -62,7 +63,13 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
 
   const schema = product.customizationSchema as CustomizationSchema | null;
   const hasCustomizer = schema && schema.fields && schema.fields.length > 0;
-  const totalPrice = product.price + priceAdjustment;
+  const isFurniture =
+    schema?.preset === "furniture" ||
+    /sideboard|regal|shelf|kommode|kleiderschrank/i.test(product.slug || "") ||
+    /sideboard|regal|shelf|kommode|kleiderschrank/i.test(product.name || "");
+
+  const isConfiguratorProduct = schema && typeof schema.pricingBase === "number";
+  const totalPrice = isConfiguratorProduct ? priceAdjustment : product.price + priceAdjustment;
   const imageUrl = selectedImage || getStrapiImageUrl(product.image, "large");
 
   const handleCustomizationChange = useCallback(
@@ -72,6 +79,10 @@ export default function ProductCustomizer({ product }: ProductCustomizerProps) {
     },
     []
   );
+
+  if (isFurniture) {
+    return <FurnitureConfigurator product={product} basePrice={product.price} />;
+  }
 
   const handleAddToCart = () => {
     addItem({

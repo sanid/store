@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useCart } from "@/context/CartContext";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, formatCustomizationForDisplay } from "@/lib/utils";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 
@@ -65,7 +65,7 @@ export default function CartDrawer() {
     <>
       {cartOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 transition-opacity"
+          className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm transition-opacity"
           onClick={() => setCartOpen(false)}
           aria-hidden="true"
         />
@@ -80,16 +80,16 @@ export default function CartDrawer() {
           cartOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-lg font-semibold text-primary">
+        <div className="flex items-center justify-between border-b border-stone-200 px-6 py-4">
+          <h2 className="text-lg font-semibold text-stone-900">
             {t("title")}
             {totalItems > 0 && (
-              <span className="ml-2 text-sm font-normal text-muted">({totalItems})</span>
+              <span className="ml-2 text-sm font-normal text-stone-400">({totalItems})</span>
             )}
           </h2>
           <button
             onClick={() => setCartOpen(false)}
-            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-primary"
+            className="rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
             aria-label="Close cart"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
@@ -100,52 +100,55 @@ export default function CartDrawer() {
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="mb-3 h-12 w-12 text-muted/30">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 0 0-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 0 0-16.536-1.84M7.5 14.25 5.106 5.272M6 20.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm12.75 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
+            <div className="flex flex-col items-center justify-center py-20">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" className="mb-4 h-12 w-12 text-stone-200">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
               </svg>
-              <p className="text-sm text-muted">{t("empty")}</p>
+              <p className="text-sm text-stone-400">{t("empty")}</p>
             </div>
           ) : (
-            <ul className="space-y-4">
+            <ul className="space-y-3">
               {items.map((item) => (
-                <li key={item.cartItemId} className="flex gap-3">
-                  <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border border-border bg-surface-dark">
+                <li key={item.cartItemId} className="flex gap-3 rounded-xl border border-stone-100 bg-white p-2.5 transition hover:border-stone-200">
+                  <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-stone-100">
                     {item.image ? (
-                      <img src={item.image} alt={item.name} className="h-full w-full object-cover" />
+                      <img src={item.image} alt={item.name} className="h-full w-full object-contain" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[9px] text-muted">No img</div>
+                      <div className="flex h-full w-full items-center justify-center text-[9px] text-stone-300">No img</div>
                     )}
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="truncate text-sm font-medium text-primary">{item.name}</h4>
-                    <p className="text-sm font-semibold text-primary">{formatPrice(item.totalPrice)}</p>
+                    <h4 className="truncate text-sm font-medium text-stone-900">{item.name}</h4>
+                    <p className="text-sm font-semibold text-stone-900">{formatPrice(item.totalPrice)}</p>
 
                     {item.customization && Object.keys(item.customization).length > 0 && (
-                      <div className="mt-0.5 flex flex-wrap gap-0.5">
-                        {Object.entries(item.customization).map(([key, val]) => {
-                          if (!val || val === "") return null;
-                          const isColor = String(val).startsWith("#");
-                          return (
-                            <span key={key} className="inline-flex items-center gap-0.5 rounded bg-surface px-1 py-px text-[9px] text-muted">
-                              {isColor && (
-                                <span className="inline-block h-2 w-2 rounded-full border border-border" style={{ backgroundColor: String(val) }} />
-                              )}
-                              {isColor ? "" : String(val).slice(0, 12)}
-                            </span>
-                          );
-                        })}
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {formatCustomizationForDisplay(item.customization).slice(0, 5).map((it) => (
+                          <span
+                            key={it.key}
+                            className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-600"
+                          >
+                            {it.swatch && (
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-full border border-stone-300"
+                                style={{ backgroundColor: it.swatch }}
+                              />
+                            )}
+                            <span className="font-medium text-stone-500">{it.label}:</span>
+                            {!it.swatch && <span>{it.value}</span>}
+                          </span>
+                        ))}
                       </div>
                     )}
 
                     <div className="mt-1.5 flex items-center justify-between">
-                      <div className="flex items-center rounded-md border border-border">
-                        <button onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)} className="cursor-pointer px-1.5 py-0.5 text-xs text-muted transition-colors hover:bg-surface hover:text-primary" aria-label="Decrease quantity">&minus;</button>
-                        <span className="min-w-[1.25rem] text-center text-xs font-medium">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)} className="cursor-pointer px-1.5 py-0.5 text-xs text-muted transition-colors hover:bg-surface hover:text-primary" aria-label="Increase quantity">+</button>
+                      <div className="flex items-center rounded-md border border-stone-200">
+                        <button onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)} className="cursor-pointer px-1.5 py-0.5 text-xs text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-700" aria-label="Decrease quantity">&minus;</button>
+                        <span className="min-w-[1.25rem] text-center text-xs font-medium text-stone-700">{item.quantity}</span>
+                        <button onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)} className="cursor-pointer px-1.5 py-0.5 text-xs text-stone-400 transition-colors hover:bg-stone-50 hover:text-stone-700" aria-label="Increase quantity">+</button>
                       </div>
-                      <button onClick={() => removeItem(item.cartItemId)} className="cursor-pointer text-[10px] text-red-500 transition-colors hover:text-red-700">{t("remove")}</button>
+                      <button onClick={() => removeItem(item.cartItemId)} className="cursor-pointer text-[10px] text-stone-400 transition-colors hover:text-red-600">{t("remove")}</button>
                     </div>
                   </div>
                 </li>
@@ -155,23 +158,23 @@ export default function CartDrawer() {
         </div>
 
         {items.length > 0 && (
-          <div className="border-t border-border px-6 py-4">
+          <div className="border-t border-stone-200 px-6 py-4">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm text-muted">{t("subtotal")}</span>
-              <span className="text-base font-bold text-primary">{formatPrice(subtotal)}</span>
+              <span className="text-sm text-stone-500">{t("subtotal")}</span>
+              <span className="text-base font-bold text-stone-900">{formatPrice(subtotal)}</span>
             </div>
-            <p className="mb-3 text-[10px] text-muted">{t("shippingCalculated")}</p>
+            <p className="mb-3 text-[10px] text-stone-400">{t("shippingCalculated")}</p>
             <Link
               href="/checkout"
               onClick={() => setCartOpen(false)}
-              className="block w-full rounded-lg bg-accent py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="block w-full rounded-lg bg-stone-900 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-stone-800"
             >
               {t("checkout", { amount: formatPrice(subtotal) })}
             </Link>
             <Link
               href="/cart"
               onClick={() => setCartOpen(false)}
-              className="mt-2 block text-center text-xs text-muted hover:text-primary"
+              className="mt-2 block text-center text-xs text-stone-400 hover:text-stone-700"
             >
               {t("viewCart")}
             </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CustomizationField } from "@/lib/types";
+import type { CustomizationField, CustomizationFieldOption } from "@/lib/types";
 
 interface ColorFieldProps {
   field: CustomizationField;
@@ -23,10 +23,25 @@ const COLOR_NAMES: Record<string, string> = {
   "#C0C0C0": "Silver",
   "#000080": "Navy",
   "#008000": "Forest",
+  "#D2B48C": "Natural",
+  "#8B7355": "Oak",
+  "#4A4A4A": "Anthracite",
+  "#2F4F4F": "Dark Slate",
+  "#6B8E23": "Olive",
+  "#A0522D": "Sienna",
 };
 
+function normalizeColorOptions(
+  options: string[] | CustomizationFieldOption[] | undefined
+): Array<{ value: string; label: string }> {
+  if (!options) return [];
+  return options.map((o) =>
+    typeof o === "string" ? { value: o, label: COLOR_NAMES[o] || o } : { value: o.value, label: o.label || COLOR_NAMES[o.value] || o.value }
+  );
+}
+
 export default function ColorField({ field, value, onChange }: ColorFieldProps) {
-  const options = field.options || [];
+  const options = normalizeColorOptions(field.options);
 
   return (
     <div>
@@ -37,25 +52,25 @@ export default function ColorField({ field, value, onChange }: ColorFieldProps) 
       <div className="flex flex-wrap gap-2">
         {options.map((color) => (
           <button
-            key={color}
+            key={color.value}
             type="button"
-            onClick={() => onChange(field.id, color)}
-            aria-label={COLOR_NAMES[color] || color}
-            aria-pressed={value === color}
+            onClick={() => onChange(field.id, color.value)}
+            aria-label={color.label}
+            aria-pressed={value === color.value}
             className={`group relative h-9 w-9 cursor-pointer rounded-full border-2 transition-all ${
-              value === color
+              value === color.value
                 ? "border-accent ring-2 ring-accent/30 scale-110"
                 : "border-border hover:border-muted hover:scale-110"
             }`}
-            style={{ backgroundColor: color }}
+            style={{ backgroundColor: color.value }}
           >
-            {color === "#FFFFFF" && (
+            {color.value === "#FFFFFF" && (
               <span className="absolute inset-0 rounded-full border border-border" />
             )}
-            {value === color && (
+            {value === color.value && (
               <svg
                 className={`absolute inset-0 m-auto h-4 w-4 ${
-                  color === "#FFFFFF" || color === "#FFFF00"
+                  color.value === "#FFFFFF" || color.value === "#FFFF00"
                     ? "text-primary"
                     : "text-white"
                 }`}
@@ -72,7 +87,7 @@ export default function ColorField({ field, value, onChange }: ColorFieldProps) 
       </div>
       {value && (
         <p className="mt-1.5 text-xs text-muted">
-          Selected: {COLOR_NAMES[value] || value}
+          {options.find((o) => o.value === value)?.label || COLOR_NAMES[value] || value}
         </p>
       )}
     </div>

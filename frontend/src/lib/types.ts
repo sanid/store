@@ -1,3 +1,9 @@
+export interface CustomizationFieldOption {
+  value: string;
+  label?: string;
+  priceModifier?: number;
+}
+
 export interface CustomizationField {
   id: string;
   type: "text" | "number" | "color" | "select" | "image" | "textarea";
@@ -8,13 +14,35 @@ export interface CustomizationField {
   max?: number;
   maxLength?: number;
   step?: number;
-  options?: string[];
+  options?: string[] | CustomizationFieldOption[];
   placeholder?: string;
   priceModifier?: Record<string, number>;
+  pricePerUnit?: number;
 }
 
 export interface CustomizationSchema {
+  pricingBase?: number;
+  pricingRules?: Array<{ field: string; type: string; rate: number }>;
   fields: CustomizationField[];
+  preset?: "furniture";
+}
+
+export type FurnitureStyle = "frame" | "grid" | "gradient" | "mosaic" | "pattern" | "pixel";
+export type CellInsert = "open" | "door" | "drawer";
+
+export interface FurnitureConfig {
+  style: FurnitureStyle;
+  width: number;
+  height: number;
+  depth: 24 | 32 | 40 | 50;
+  columns: number;
+  rows: number;
+  density: number;
+  base: "legs" | "plinth";
+  backs: boolean;
+  finish: "color" | "plywood" | "veneer";
+  color: string;
+  cells: CellInsert[];
 }
 
 export interface StrapiMediaFormat {
