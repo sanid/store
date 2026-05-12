@@ -49,7 +49,7 @@ export default async function HowToShopPage({
               "Farbenvorschau in Echtzeit im 3D-Konfigurator",
               "Detaillierte Produktinformationen & Preise",
             ]}
-            cta={{ label: "Stoffe durchsuchen", href: "/curtain-configurator" }}
+            cta={{ label: "Stoffe durchsuchen", href: "/stoffe" }}
           />
 
           <Step

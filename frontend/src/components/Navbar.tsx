@@ -15,13 +15,19 @@ export default function Navbar() {
     <>
       <header className="sticky top-0 z-50 border-b border-white/10 bg-stone-950 text-white">
         <nav className="mx-auto grid max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-6 py-5 lg:px-10">
-          {/* Left: configurator link */}
-          <div className="hidden md:flex">
+          {/* Left: nav links */}
+          <div className="hidden items-center gap-6 md:flex">
+            <Link
+              href="/stoffe"
+              className="text-[11px] font-medium uppercase tracking-[0.2em] text-stone-300 transition hover:text-white"
+            >
+              Stoffe
+            </Link>
             <Link
               href="/curtain-configurator"
               className="text-[11px] font-medium uppercase tracking-[0.2em] text-stone-300 transition hover:text-white"
             >
-              Vorhang Konfigurator
+              Konfigurator
             </Link>
           </div>
 
@@ -85,11 +91,18 @@ export default function Navbar() {
         {mobileOpen && (
           <div className="border-t border-white/10 px-6 py-4 md:hidden">
             <Link
+              href="/stoffe"
+              className="block py-2 text-[11px] font-medium uppercase tracking-[0.2em] text-stone-300"
+              onClick={() => setMobileOpen(false)}
+            >
+              Stoffe
+            </Link>
+            <Link
               href="/curtain-configurator"
               className="block py-2 text-[11px] font-medium uppercase tracking-[0.2em] text-stone-300"
               onClick={() => setMobileOpen(false)}
             >
-              Vorhang Konfigurator
+              Konfigurator
             </Link>
             <a
               href="#kontakt"
