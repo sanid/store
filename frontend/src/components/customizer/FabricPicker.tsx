@@ -26,6 +26,7 @@ const PATTERNS: { id: FabricSwatch["pattern"]; label: string }[] = [
   { id: "floral", label: "Floral" },
   { id: "geometric", label: "Geometrisch" },
   { id: "textured", label: "Strukturiert" },
+  { id: "photo", label: "Motiv" },
 ];
 const TRANSP: { id: FabricSwatch["transparency"]; label: string }[] = [
   { id: "opaque", label: "Blickdicht" },
@@ -120,62 +121,9 @@ export default function FabricPicker({ open, selectedId, onClose, onSelect }: Pr
 
         <div className="overflow-y-auto p-5">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-            {grouped.map(([key, items]) => {
-              const head = items[0];
-              const colors = items.slice(0, 6);
-              const isSelected = items.some((i) => i.id === selectedId);
-              return (
-                <div
-                  key={key}
-                  className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-white transition hover:-translate-y-0.5 hover:shadow-lg ${
-                    isSelected ? "border-stone-900 ring-2 ring-stone-900" : "border-stone-200"
-                  }`}
-                  onClick={() => onSelect(head)}
-                >
-                  <div className="absolute left-3 top-3 z-10 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-stone-700 shadow-sm">
-                    {items.length} Farben
-                  </div>
-                  <div
-                    className="relative h-56 w-full"
-                    style={{
-                      background: `linear-gradient(135deg, ${head.hex} 0%, ${head.hex} 100%)`,
-                    }}
-                  >
-                    <div className="absolute inset-0 opacity-20 mix-blend-overlay" style={{ backgroundImage: noiseSvg() }} />
-                    <div className="absolute right-3 bottom-3 text-[10px] font-bold uppercase tracking-wider text-white/80 drop-shadow">
-                      {head.brand}
-                    </div>
-                  </div>
-                  <div className="px-3 py-3">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      {colors.map((c) => (
-                        <span
-                          key={c.id}
-                          className="h-3.5 w-3.5 rounded-full ring-1 ring-stone-200"
-                          style={{ backgroundColor: c.hex }}
-                          title={c.colorName}
-                        />
-                      ))}
-                      {items.length > 6 && (
-                        <span className="text-[10px] text-stone-500">+{items.length - 6}</span>
-                      )}
-                    </div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-stone-900">
-                      {head.brand}
-                    </div>
-                    <div className="mt-0.5 text-sm text-stone-700">
-                      {head.collection} <span className="font-semibold">{head.colorName}</span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-xs">
-                      <span className="text-stone-400">{head.id.toUpperCase().slice(-8)}</span>
-                      <span className="font-semibold text-stone-900">
-                        {(head.pricePerMeter / 100).toFixed(2)} €/m*
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {grouped.map(([key, items]) => (
+              <CollectionCard key={key} items={items} selectedId={selectedId} onSelect={onSelect} />
+            ))}
           </div>
           {grouped.length === 0 && (
             <div className="py-20 text-center text-stone-400">Keine Stoffe gefunden.</div>
@@ -192,6 +140,85 @@ export default function FabricPicker({ open, selectedId, onClose, onSelect }: Pr
           <div className="text-xs text-stone-400">
             * Preis pro laufendem Meter, exkl. Konfektion
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CollectionCard({
+  items,
+  selectedId,
+  onSelect,
+}: {
+  items: FabricSwatch[];
+  selectedId: string;
+  onSelect: (fabric: FabricSwatch) => void;
+}) {
+  const selectedInGroup = items.find((i) => i.id === selectedId);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const active = items.find((i) => i.id === (hoveredId ?? selectedInGroup?.id)) ?? items[0];
+  const colors = items.slice(0, 8);
+  const isSelected = !!selectedInGroup;
+
+  return (
+    <div
+      className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-white transition hover:-translate-y-0.5 hover:shadow-lg ${
+        isSelected ? "border-stone-900 ring-2 ring-stone-900" : "border-stone-200"
+      }`}
+      onClick={() => onSelect(active)}
+    >
+      <div className="absolute left-3 top-3 z-10 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold text-stone-700 shadow-sm">
+        {items.length} Farbe{items.length !== 1 ? "n" : ""}
+      </div>
+      <div
+        className="relative h-56 w-full transition-colors duration-200"
+        style={{ background: active.hex }}
+      >
+        <div className="absolute inset-0 opacity-20 mix-blend-overlay" style={{ backgroundImage: noiseSvg() }} />
+        <div className="absolute right-3 bottom-3 text-[10px] font-bold uppercase tracking-wider text-white/80 drop-shadow">
+          {active.brand}
+        </div>
+      </div>
+      <div className="px-3 py-3">
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          {colors.map((c) => {
+            const isActive = c.id === active.id;
+            return (
+              <button
+                key={c.id}
+                className={`h-4 w-4 rounded-full transition ${
+                  isActive
+                    ? "ring-2 ring-stone-900 ring-offset-1 scale-110"
+                    : "ring-1 ring-stone-300 hover:ring-stone-400"
+                }`}
+                style={{ backgroundColor: c.hex }}
+                title={c.colorName}
+                onMouseEnter={() => setHoveredId(c.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHoveredId(null);
+                  onSelect(c);
+                }}
+              />
+            );
+          })}
+          {items.length > 8 && (
+            <span className="text-[10px] text-stone-500">+{items.length - 8}</span>
+          )}
+        </div>
+        <div className="text-[11px] font-bold uppercase tracking-wider text-stone-900">
+          {active.brand}
+        </div>
+        <div className="mt-0.5 text-sm text-stone-700">
+          {active.collection} <span className="font-semibold">{active.colorName}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between text-xs">
+          <span className="text-stone-400">{active.material}</span>
+          <span className="font-semibold text-stone-900">
+            {(active.pricePerMeter / 100).toFixed(2)} €/m*
+          </span>
         </div>
       </div>
     </div>

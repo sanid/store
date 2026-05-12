@@ -1,7 +1,7 @@
 "use client";
 
 import { useCart } from "@/context/CartContext";
-import { formatPrice } from "@/lib/utils";
+import { formatPrice, formatCustomizationForDisplay } from "@/lib/utils";
 import { Link } from "@/i18n/routing";
 import { useTranslations } from "next-intl";
 
@@ -37,7 +37,9 @@ export default function CartContent() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+      <h1 className="mb-8 text-2xl font-semibold text-primary">{t("title")}</h1>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
       <div className="lg:col-span-2">
         <div className="space-y-4">
           {items.map((item) => (
@@ -68,24 +70,21 @@ export default function CartContent() {
                 {item.customization &&
                   Object.keys(item.customization).length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {Object.entries(item.customization).map(([key, val]) => {
-                        if (!val || val === "") return null;
-                        const isColor = String(val).startsWith("#");
-                        return (
-                          <span
-                            key={key}
-                            className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] text-muted"
-                          >
-                            {isColor ? (
-                              <span
-                                className="inline-block h-2.5 w-2.5 rounded-full border border-border"
-                                style={{ backgroundColor: String(val) }}
-                              />
-                            ) : null}
-                            {key}: {isColor ? "" : String(val)}
-                          </span>
-                        );
-                      })}
+                      {formatCustomizationForDisplay(item.customization).map((it) => (
+                        <span
+                          key={it.key}
+                          className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] text-muted"
+                        >
+                          {it.swatch && (
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full border border-border"
+                              style={{ backgroundColor: it.swatch }}
+                            />
+                          )}
+                          <span className="font-medium">{it.label}:</span>
+                          <span>{it.value}</span>
+                        </span>
+                      ))}
                     </div>
                   )}
 
@@ -157,6 +156,7 @@ export default function CartContent() {
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 }

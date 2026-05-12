@@ -124,7 +124,7 @@ export default function CartDrawer() {
 
                     {item.customization && Object.keys(item.customization).length > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {formatCustomizationForDisplay(item.customization).slice(0, 5).map((it) => (
+                        {formatCustomizationForDisplay(item.customization).map((it) => (
                           <span
                             key={it.key}
                             className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-600"
@@ -136,7 +136,7 @@ export default function CartDrawer() {
                               />
                             )}
                             <span className="font-medium text-stone-500">{it.label}:</span>
-                            {!it.swatch && <span>{it.value}</span>}
+                            <span>{it.value}</span>
                           </span>
                         ))}
                       </div>

@@ -17,6 +17,8 @@ const BESTSELLER_IDS = [
   "uf-velluto-cream",
   "romo-linara-clay",
   "zr-colibri-emerald",
+  "uf-decor-sage",
+  "uf-decor-terracotta",
 ];
 
 const BESTSELLERS = BESTSELLER_IDS
@@ -172,6 +174,13 @@ function FabricCard({ fabric }: { fabric: FabricSwatch }) {
       className="group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden border border-stone-200 bg-white transition hover:shadow-lg"
     >
       <div className="relative h-72 w-full overflow-hidden" style={{ backgroundColor: fabric.hex }}>
+        {fabric.pattern === "photo" && (
+          <img
+            src="/pattern.jpg"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover opacity-60 mix-blend-multiply"
+          />
+        )}
         <div
           className="absolute inset-0 opacity-25 mix-blend-overlay"
           style={{ backgroundImage: noiseUrl() }}

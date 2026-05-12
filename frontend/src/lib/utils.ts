@@ -33,6 +33,11 @@ const FURNITURE_LABELS: Record<string, string> = {
   doors: "Türen",
   cells: "Fächer",
   density: "Dichte",
+  side: "Seite",
+  header: "Faltenband",
+  reserve: "Stoffzugabe",
+  lining: "Futterstoff",
+  accessory: "Zubehör",
 };
 
 const FURNITURE_VALUES: Record<string, string> = {
@@ -50,6 +55,22 @@ const FURNITURE_VALUES: Record<string, string> = {
   door: "Tür",
   drawer: "Schublade",
   open: "Offen",
+  left: "Links",
+  right: "Rechts",
+  both: "Beidseitig",
+  wave: "Wellenband",
+  flemish: "Flämische Falte",
+  "triple-pinch": "3er Falte",
+  none: "Ohne",
+  low: "Gering",
+  normal: "Normal",
+  high: "Viel",
+  thermo: "Thermo",
+  acoustic: "Akustikstoff",
+  dimout: "Dimout",
+  blackout: "Blackout",
+  "glider-4mm": "Clic-Gleiter 4 mm",
+  "glider-6mm": "Clic-Gleiter 6 mm",
 };
 
 export interface CustomizationDisplayItem {
@@ -65,7 +86,14 @@ export function formatCustomizationForDisplay(
   const out: CustomizationDisplayItem[] = [];
   for (const [key, raw] of Object.entries(customization)) {
     if (raw === undefined || raw === null || raw === "") continue;
+    if (key === "fabricLabel" || key === "fabricId" || key === "name" || key === "remark") continue;
     const label = FURNITURE_LABELS[key] ?? key;
+
+    if (key === "fabric" && typeof raw === "string" && raw.startsWith("#")) {
+      const fabricLabel = customization["fabricLabel"];
+      out.push({ key, label: "Stoff", value: typeof fabricLabel === "string" ? fabricLabel : raw, swatch: raw });
+      continue;
+    }
 
     if (key === "doors" && Array.isArray(raw)) {
       const count = raw.filter(Boolean).length;

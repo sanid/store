@@ -56,7 +56,7 @@ export default function CheckoutPage() {
 
   if (items.length === 0 && !clientSecret) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 text-center">
         <h1 className="mb-4 text-2xl font-bold text-primary">{t("title")}</h1>
         <p className="mb-4 text-muted">{t("empty")}</p>
         <Link
@@ -183,7 +183,7 @@ export default function CheckoutPage() {
   const inputCls = "w-full rounded-lg border border-border px-3 py-2.5 text-sm text-primary placeholder:text-muted/50 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent";
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
       <h1 className="mb-8 text-3xl font-bold text-primary">{t("title")}</h1>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">

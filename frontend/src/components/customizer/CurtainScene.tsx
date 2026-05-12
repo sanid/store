@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls, ContactShadows } from "@react-three/drei";
+import { OrbitControls, ContactShadows, useTexture } from "@react-three/drei";
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import type { CurtainConfig, CurtainHeader, FabricReserve, FabricSwatch } from "@/lib/curtains";
@@ -12,6 +12,11 @@ interface Props {
   fabric: FabricSwatch | undefined;
   onReady?: (gl: THREE.WebGLRenderer) => void;
 }
+
+const WIN_BOTTOM_Y = 0.9;
+const WIN_H = 1.5;
+const WIN_W = 1.4;
+const RAIL_Y = WIN_BOTTOM_Y + WIN_H + 0.02;
 
 // Folds: PlaneGeometry with many width segments displaced in Z by sin(x)
 function curtainGeometry(
@@ -123,6 +128,7 @@ function CurtainPanel({
   config,
   fabric,
   railWidthM,
+  xOffset,
 }: {
   side: "left" | "right";
   widthM: number;
@@ -130,20 +136,31 @@ function CurtainPanel({
   config: CurtainConfig;
   fabric: FabricSwatch;
   railWidthM: number;
+  xOffset: number;
 }) {
+  const isPhoto = fabric.pattern === "photo";
   const geo = useMemo(
     () => curtainGeometry(widthM, heightM, config.reserve, config.header),
     [widthM, heightM, config.reserve, config.header]
   );
-  const tex = useMemo(() => fabricTexture(fabric.hex, fabric.pattern), [fabric.hex, fabric.pattern]);
+  const photoTexRaw = useTexture("/pattern.jpg");
+  const photoTex = useMemo(() => {
+    const t = photoTexRaw.clone();
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.RepeatWrapping;
+    t.needsUpdate = true;
+    return t;
+  }, [photoTexRaw]);
+  const canvasTex = useMemo(
+    () => (isPhoto ? null : fabricTexture(fabric.hex, fabric.pattern)),
+    [fabric.hex, fabric.pattern, isPhoto]
+  );
+  const tex = isPhoto ? photoTex : canvasTex!;
 
   useEffect(() => {
     const repeats = Math.max(2, Math.round(widthM * 2));
     tex.repeat.set(repeats, Math.max(2, Math.round(heightM * 1.5)));
   }, [tex, widthM, heightM]);
-
-  // Position each panel near its rail edge
-  const xOffset = side === "left" ? -railWidthM / 2 + widthM / 2 : railWidthM / 2 - widthM / 2;
   const roughness = fabric.material === "velvet" ? 0.55 : fabric.material === "silk-blend" ? 0.45 : 0.85;
   const sheen = fabric.material === "velvet" ? 0.4 : fabric.material === "silk-blend" ? 0.3 : 0.1;
   const transparent = fabric.transparency === "sheer" || fabric.transparency === "translucent";
@@ -151,10 +168,10 @@ function CurtainPanel({
     fabric.transparency === "sheer" ? 0.55 : fabric.transparency === "translucent" ? 0.78 : 1;
 
   return (
-    <mesh position={[xOffset, heightM / 2, 0]} geometry={geo} castShadow receiveShadow>
+    <mesh position={[xOffset, RAIL_Y - heightM / 2, 0]} geometry={geo} castShadow receiveShadow>
       <meshPhysicalMaterial
         map={tex}
-        color="#ffffff"
+        color={isPhoto ? fabric.hex : "#ffffff"}
         roughness={roughness}
         sheen={sheen}
         sheenColor={fabric.hex}
@@ -166,9 +183,9 @@ function CurtainPanel({
   );
 }
 
-function Rail({ widthM, heightM }: { widthM: number; heightM: number }) {
+function Rail({ widthM }: { widthM: number }) {
   return (
-    <group position={[0, heightM + 0.02, 0]}>
+    <group position={[0, RAIL_Y, 0]}>
       <mesh castShadow>
         <boxGeometry args={[widthM + 0.4, 0.04, 0.04]} />
         <meshStandardMaterial color="#1a1a1a" metalness={0.4} roughness={0.5} />
@@ -186,15 +203,9 @@ function Rail({ widthM, heightM }: { widthM: number; heightM: number }) {
   );
 }
 
-function Room({ widthM, heightM }: { widthM: number; heightM: number }) {
-  // Always render a sizeable room regardless of curtain width.
+function Room({ widthM }: { widthM: number }) {
   const wallW = Math.max(widthM + 4.5, 6);
-  const wallH = Math.max(heightM + 1.4, 3.2);
-  // Window is anchored to the room, NOT the curtain. Typical EU dimensions.
-  const winBottomY = 0.9; // 90 cm above floor (standard sill height)
-  const winH = 1.5;       // 150 cm tall
-  const winW = Math.max(0.9, Math.min(widthM - 0.1, 2.4));
-  const winYCenter = winBottomY + winH / 2;
+  const wallH = Math.max(RAIL_Y + 1.4, 3.2);
 
   return (
     <group>
@@ -210,7 +221,7 @@ function Room({ widthM, heightM }: { widthM: number; heightM: number }) {
         <meshStandardMaterial color="#f6f2ea" roughness={0.7} />
       </mesh>
 
-      <EuropeanWindow widthM={winW} heightM={winH} y={winYCenter} />
+      <EuropeanWindow widthM={WIN_W} heightM={WIN_H} y={WIN_BOTTOM_Y + WIN_H / 2} />
 
       {/* Floor — large warm oak plane */}
       <mesh position={[0, 0, 1.4]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -261,34 +272,39 @@ function EuropeanWindow({
   const skyZ = 0.015; // local Z, in front of wall when window is at z=-0.2
   return (
     <group position={[0, y, z]}>
-      {/* Sky base */}
+      {/* Sky — warm afternoon haze */}
       <mesh position={[0, 0, skyZ]}>
         <planeGeometry args={[widthM - 0.02, heightM - 0.02]} />
-        <meshBasicMaterial color="#cfdde6" />
+        <meshBasicMaterial color="#c8dce8" />
       </mesh>
-      {/* Soft sky gradient — brighter top */}
-      <mesh position={[0, heightM * 0.28, skyZ + 0.001]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.45]} />
-        <meshBasicMaterial color="#eaf2f6" transparent opacity={0.85} />
+      {/* Upper sky — slightly lighter/warmer */}
+      <mesh position={[0, heightM * 0.25, skyZ + 0.001]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.5]} />
+        <meshBasicMaterial color="#ddeaf0" transparent opacity={0.7} />
       </mesh>
-      {/* Distant horizon — meadow */}
-      <mesh position={[0, -heightM * 0.18, skyZ + 0.002]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.4]} />
-        <meshBasicMaterial color="#a8c0a8" />
+      {/* Horizon haze — very subtle warm band */}
+      <mesh position={[0, -heightM * 0.3, skyZ + 0.002]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.25]} />
+        <meshBasicMaterial color="#d8e6df" transparent opacity={0.6} />
       </mesh>
-      {/* Tree silhouette */}
-      <mesh position={[0, -heightM * 0.05, skyZ + 0.003]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.22]} />
-        <meshBasicMaterial color="#7a9a82" transparent opacity={0.7} />
+      {/* Distant treeline — muted, low contrast */}
+      <mesh position={[0, -heightM * 0.38, skyZ + 0.003]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.16]} />
+        <meshBasicMaterial color="#8fa48f" transparent opacity={0.75} />
       </mesh>
-      {/* Soft cloud blobs */}
-      <mesh position={[widthM * 0.18, heightM * 0.28, skyZ + 0.004]}>
-        <circleGeometry args={[heightM * 0.08, 24]} />
-        <meshBasicMaterial color="#ffffff" transparent opacity={0.55} />
+      {/* Ground strip below treeline */}
+      <mesh position={[0, -heightM * 0.47, skyZ + 0.003]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.08]} />
+        <meshBasicMaterial color="#9aaa8a" />
       </mesh>
-      <mesh position={[-widthM * 0.22, heightM * 0.34, skyZ + 0.004]}>
-        <circleGeometry args={[heightM * 0.05, 24]} />
-        <meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
+      {/* Soft cloud */}
+      <mesh position={[widthM * 0.15, heightM * 0.22, skyZ + 0.004]}>
+        <circleGeometry args={[heightM * 0.07, 24]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.45} />
+      </mesh>
+      <mesh position={[-widthM * 0.2, heightM * 0.3, skyZ + 0.004]}>
+        <circleGeometry args={[heightM * 0.04, 24]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.35} />
       </mesh>
 
       {/* Outer frame — 4 strips */}
@@ -443,12 +459,15 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
   }
   const railWidthM = Math.max(0.6, config.width / 100);
   const heightM = Math.max(0.6, config.height / 100);
-  const panelWidthM =
-    config.side === "both" ? railWidthM / 2 + 0.04 : railWidthM * 0.6;
+  // Single panels cover the full rail width; paired panels each cover half + small overlap.
+  const isBoth = config.side === "both";
+  const panelWidthM = railWidthM / 2 + 0.04;
+  const leftXOffset = -railWidthM / 2 + panelWidthM / 2;
+  const rightXOffset = railWidthM / 2 - panelWidthM / 2;
 
   return (
     <Canvas
-      camera={{ position: [0, heightM * 0.5, Math.max(3.4, railWidthM * 1.9)], fov: 48 }}
+      camera={{ position: [0, RAIL_Y * 0.5, Math.max(3.4, railWidthM * 1.9)], fov: 48 }}
       shadows
       gl={{ preserveDrawingBuffer: true, antialias: true }}
     >
@@ -464,16 +483,16 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
       />
       <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#e9d8b8" />
       <hemisphereLight args={["#fff5e6", "#9a8870", 0.45]} />
-      <pointLight position={[0, heightM * 0.6, 1.5]} intensity={0.4} color="#fff2dc" />
+      <pointLight position={[0, RAIL_Y * 0.6, 1.5]} intensity={0.4} color="#fff2dc" />
 
-      <Room widthM={railWidthM} heightM={heightM} />
-      <Rail widthM={railWidthM} heightM={heightM} />
+      <Room widthM={railWidthM} />
+      <Rail widthM={railWidthM} />
 
       {(config.side === "left" || config.side === "both") && (
-        <CurtainPanel side="left" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} />
+        <CurtainPanel side="left" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={leftXOffset} />
       )}
       {(config.side === "right" || config.side === "both") && (
-        <CurtainPanel side="right" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} />
+        <CurtainPanel side="right" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={rightXOffset} />
       )}
 
       <ContactShadows
@@ -490,7 +509,7 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
         maxDistance={6}
         minPolarAngle={Math.PI / 3.2}
         maxPolarAngle={Math.PI / 2.05}
-        target={[0, heightM / 2, 0]}
+        target={[0, WIN_BOTTOM_Y + WIN_H / 2, 0]}
       />
     </Canvas>
   );

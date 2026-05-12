@@ -143,7 +143,20 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
       totalPrice,
       quantity,
       image: preview,
-      customization: { ...config } as Record<string, unknown>,
+      customization: {
+        fabric: fabric.hex,
+        fabricLabel: `${fabric.collection} ${fabric.colorName} — ${fabric.brand}`,
+        fabricId: config.fabricId,
+        name: config.name,
+        side: config.side,
+        width: config.width,
+        height: config.height,
+        header: config.header,
+        reserve: config.reserve,
+        lining: config.lining,
+        accessory: config.accessory,
+        remark: config.remark,
+      } as Record<string, unknown>,
       customizationPriceAdjustment: 0,
     });
     setAdded(true);
@@ -162,8 +175,8 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
         </div>
       </div>
 
-      <aside className="border-l border-stone-200">
-        <div className="px-6 py-6 lg:sticky lg:top-[57px] lg:max-h-[calc(100vh-57px)] lg:overflow-y-auto">
+      <aside className="flex flex-col border-l border-stone-200 lg:max-h-[calc(100vh-57px)]">
+        <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="mb-2 flex items-center gap-2 text-xs text-stone-500">
             <span>Home</span>
             <span>›</span>
@@ -250,10 +263,6 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
                       ✎
                     </button>
                   </span>
-                  <div className="flex gap-6">
-                    <span>Menge</span>
-                    <span>Gesamtpreis</span>
-                  </div>
                 </div>
                 <div className="mt-2 flex items-center gap-3">
                   <button
@@ -266,25 +275,7 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
                     {fabric.collection} <span className="font-semibold">{fabric.colorName}</span>{" "}
                     <span className="text-stone-500">— {fabric.brand}</span>
                   </div>
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={quantity}
-                    onChange={(e) => setQuantity(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
-                    className="w-14 rounded-lg border border-stone-200 px-2 py-1 text-center text-sm"
-                  />
-                  <div className="min-w-[90px] text-right text-base font-bold text-stone-900">
-                    {formatPrice(totalPrice)}
-                  </div>
                 </div>
-
-                <button
-                  onClick={handleAdd}
-                  className="mt-3 w-full cursor-pointer rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-stone-700"
-                >
-                  {added ? "Hinzugefügt!" : "in den Warenkorb"}
-                </button>
               </div>
             )}
 
@@ -365,6 +356,39 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
             Maßgefertigt · Versand in 10–14 Werktagen
           </p>
         </div>
+
+        {fabric && (
+          <div className="border-t border-stone-200 bg-white px-6 py-4">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPickerOpen(true)}
+                className="h-8 w-8 shrink-0 cursor-pointer rounded-full ring-1 ring-stone-200"
+                style={{ backgroundColor: fabric.hex }}
+                aria-label="Stoff wechseln"
+              />
+              <div className="flex-1 min-w-0 truncate text-sm text-stone-800">
+                {fabric.collection} <span className="font-semibold">{fabric.colorName}</span>
+              </div>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={quantity}
+                onChange={(e) => setQuantity(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
+                className="w-14 rounded-lg border border-stone-200 px-2 py-1 text-center text-sm"
+              />
+              <div className="min-w-[90px] text-right text-base font-bold text-stone-900">
+                {formatPrice(totalPrice)}
+              </div>
+            </div>
+            <button
+              onClick={handleAdd}
+              className="mt-3 w-full cursor-pointer rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-stone-700"
+            >
+              {added ? "Hinzugefügt!" : "in den Warenkorb"}
+            </button>
+          </div>
+        )}
       </aside>
 
       <FabricPicker
