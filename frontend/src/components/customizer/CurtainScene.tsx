@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
-import { OrbitControls, ContactShadows, Environment } from "@react-three/drei";
+import { OrbitControls, ContactShadows } from "@react-three/drei";
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import type { CurtainConfig, CurtainHeader, FabricReserve, FabricSwatch } from "@/lib/curtains";
@@ -254,8 +254,9 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
       />
-      <directionalLight position={[-3, 2, -2]} intensity={0.3} />
-      <Environment preset="apartment" />
+      <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#e9d8b8" />
+      <hemisphereLight args={["#fff5e6", "#9a8870", 0.45]} />
+      <pointLight position={[0, heightM * 0.6, 1.5]} intensity={0.4} color="#fff2dc" />
 
       <Room widthM={railWidthM} heightM={heightM} />
       <Rail widthM={railWidthM} heightM={heightM} />
