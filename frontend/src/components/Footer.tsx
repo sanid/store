@@ -35,6 +35,24 @@ export default function Footer() {
                   Vorhang konfigurieren
                 </Link>
               </li>
+              <li>
+                <Link
+                  href="/how-to-shop"
+                  className="text-sm text-stone-300 transition hover:text-white"
+                >
+                  So bestellen Sie
+                </Link>
+              </li>
+              <li>
+                <Link href="/stoffe" className="text-sm text-stone-300 transition hover:text-white">
+                  Alle Stoffe
+                </Link>
+              </li>
+              <li>
+                <Link href="/versand" className="text-sm text-stone-300 transition hover:text-white">
+                  Versand &amp; Zahlung
+                </Link>
+              </li>
             </ul>
           </div>
 

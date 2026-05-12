@@ -76,9 +76,17 @@ export default function BestsellersCarousel() {
           <h2 className="font-serif text-3xl font-light tracking-tight text-stone-900">
             Unsere Bestseller &amp; Empfehlungen
           </h2>
-          <p className="mt-1 text-sm text-stone-500">
-            Die beliebtesten Stoffe unserer Kunden
-          </p>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-sm text-stone-500">
+              Die beliebtesten Stoffe unserer Kunden
+            </p>
+            <Link
+              href="/stoffe"
+              className="text-[11px] font-semibold uppercase tracking-[0.15em] text-stone-500 transition hover:text-stone-900"
+            >
+              Alle Stoffe ansehen →
+            </Link>
+          </div>
         </div>
 
         <div className="relative">

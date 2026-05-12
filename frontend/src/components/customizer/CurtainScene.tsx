@@ -2,7 +2,7 @@
 
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, ContactShadows, useTexture } from "@react-three/drei";
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, memo } from "react";
 import * as THREE from "three";
 import type { CurtainConfig, CurtainHeader, FabricReserve, FabricSwatch } from "@/lib/curtains";
 import { RESERVE_FACTOR } from "@/lib/curtains";
@@ -27,8 +27,8 @@ function curtainGeometry(
 ): THREE.BufferGeometry {
   const fullness = RESERVE_FACTOR[reserve];
   // Dense mesh so folds read as soft fabric rather than ribbed strips.
-  const segments = Math.max(80, Math.min(240, Math.round(widthM * 110 * fullness)));
-  const geo = new THREE.PlaneGeometry(widthM, heightM, segments, 24);
+  const segments = Math.max(60, Math.min(120, Math.round(widthM * 60 * fullness)));
+  const geo = new THREE.PlaneGeometry(widthM, heightM, segments, 10);
   const pos = geo.attributes.position;
   // Fewer, wider folds — looks more like real pleated curtain.
   const foldsPerMeter = 2.6 * fullness;
@@ -121,7 +121,7 @@ function fabricTexture(hex: string, pattern: FabricSwatch["pattern"]): THREE.Tex
   return tex;
 }
 
-function CurtainPanel({
+const CurtainPanel = memo(function CurtainPanel({
   side,
   widthM,
   heightM,
@@ -162,28 +162,25 @@ function CurtainPanel({
     tex.repeat.set(repeats, Math.max(2, Math.round(heightM * 1.5)));
   }, [tex, widthM, heightM]);
   const roughness = fabric.material === "velvet" ? 0.55 : fabric.material === "silk-blend" ? 0.45 : 0.85;
-  const sheen = fabric.material === "velvet" ? 0.4 : fabric.material === "silk-blend" ? 0.3 : 0.1;
   const transparent = fabric.transparency === "sheer" || fabric.transparency === "translucent";
   const opacity =
     fabric.transparency === "sheer" ? 0.55 : fabric.transparency === "translucent" ? 0.78 : 1;
 
   return (
     <mesh position={[xOffset, RAIL_Y - heightM / 2, 0]} geometry={geo} castShadow receiveShadow>
-      <meshPhysicalMaterial
+      <meshStandardMaterial
         map={tex}
         color={isPhoto ? fabric.hex : "#ffffff"}
         roughness={roughness}
-        sheen={sheen}
-        sheenColor={fabric.hex}
         side={THREE.DoubleSide}
         transparent={transparent}
         opacity={opacity}
       />
     </mesh>
   );
-}
+});
 
-function Rail({ widthM }: { widthM: number }) {
+const Rail = memo(function Rail({ widthM }: { widthM: number }) {
   return (
     <group position={[0, RAIL_Y, 0]}>
       <mesh castShadow>
@@ -201,9 +198,9 @@ function Rail({ widthM }: { widthM: number }) {
       </mesh>
     </group>
   );
-}
+});
 
-function Room({ widthM }: { widthM: number }) {
+const Room = memo(function Room({ widthM }: { widthM: number }) {
   const wallW = Math.max(widthM + 4.5, 6);
   const wallH = Math.max(RAIL_Y + 1.4, 3.2);
 
@@ -245,9 +242,9 @@ function Room({ widthM }: { widthM: number }) {
       <FloorLamp x={widthM / 2 + 0.9} />
     </group>
   );
-}
+});
 
-function EuropeanWindow({
+const EuropeanWindow = memo(function EuropeanWindow({
   widthM,
   heightM,
   y,
@@ -370,9 +367,9 @@ function EuropeanWindow({
       </mesh>
     </group>
   );
-}
+});
 
-function ConsoleTable({ x }: { x: number }) {
+const ConsoleTable = memo(function ConsoleTable({ x }: { x: number }) {
   const topY = 0.78;
   return (
     <group position={[x, 0, 0.18]}>
@@ -419,9 +416,9 @@ function ConsoleTable({ x }: { x: number }) {
       </mesh>
     </group>
   );
-}
+});
 
-function FloorLamp({ x }: { x: number }) {
+const FloorLamp = memo(function FloorLamp({ x }: { x: number }) {
   return (
     <group position={[x, 0, 0.15]}>
       {/* Marble base */}
@@ -443,7 +440,7 @@ function FloorLamp({ x }: { x: number }) {
       <pointLight position={[0, 1.6, 0]} intensity={0.35} distance={1.4} color="#ffd9a8" />
     </group>
   );
-}
+});
 
 function Capture({ onReady }: { onReady?: (gl: THREE.WebGLRenderer) => void }) {
   const { gl } = useThree();
@@ -469,7 +466,9 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
     <Canvas
       camera={{ position: [0, RAIL_Y * 0.5, Math.max(3.4, railWidthM * 1.9)], fov: 48 }}
       shadows
-      gl={{ preserveDrawingBuffer: true, antialias: true }}
+      frameloop="demand"
+      dpr={[1, 1.5]}
+      gl={{ preserveDrawingBuffer: true, antialias: true, powerPreference: "high-performance" }}
     >
       <Capture onReady={onReady} />
       <color attach="background" args={["#f3efe7"]} />
@@ -478,8 +477,8 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
         position={[2, 4, 3]}
         intensity={1.1}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={512}
+        shadow-mapSize-height={512}
       />
       <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#e9d8b8" />
       <hemisphereLight args={["#fff5e6", "#9a8870", 0.45]} />
@@ -497,10 +496,11 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
 
       <ContactShadows
         position={[0, 0.001, 0.2]}
-        opacity={0.45}
-        scale={6}
-        blur={2.2}
-        far={2}
+        opacity={0.4}
+        scale={5}
+        blur={1.5}
+        far={1.5}
+        resolution={256}
       />
 
       <OrbitControls

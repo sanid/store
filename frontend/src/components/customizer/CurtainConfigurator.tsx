@@ -129,7 +129,10 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
     setConfig((p) => ({ ...p, [key]: value }));
   }, []);
 
-  const unitPrice = useMemo(() => priceCurtain(config), [config]);
+  const unitPrice = useMemo(
+    () => priceCurtain({ ...config, name: "", remark: "" }),
+    [config.fabricId, config.side, config.width, config.height, config.header, config.reserve, config.lining, config.accessory]
+  );
   const totalPrice = unitPrice * quantity;
 
   const handleAdd = () => {
