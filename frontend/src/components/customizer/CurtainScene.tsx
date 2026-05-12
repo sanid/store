@@ -190,10 +190,11 @@ function Room({ widthM, heightM }: { widthM: number; heightM: number }) {
   // Always render a sizeable room regardless of curtain width.
   const wallW = Math.max(widthM + 4.5, 6);
   const wallH = Math.max(heightM + 1.4, 3.2);
-  // Window roughly matches the rail, with a small inset so the rail extends beyond it.
+  // Window is anchored to the room, NOT the curtain. Typical EU dimensions.
+  const winBottomY = 0.9; // 90 cm above floor (standard sill height)
+  const winH = 1.5;       // 150 cm tall
   const winW = Math.max(0.9, Math.min(widthM - 0.1, 2.4));
-  const winH = Math.min(heightM * 0.82, heightM - 0.3);
-  const winYCenter = heightM * 0.5 + 0.08;
+  const winYCenter = winBottomY + winH / 2;
 
   return (
     <group>
@@ -256,26 +257,38 @@ function EuropeanWindow({
   const sashW = (widthM - frameT * 2 - sashGap) / 2;
   const sashH = heightM - frameT * 2;
 
+  // Outdoor view sits in front of the back wall (-0.22) but behind the window frame.
+  const skyZ = 0.015; // local Z, in front of wall when window is at z=-0.2
   return (
     <group position={[0, y, z]}>
-      {/* Reveal — recessed sky panel */}
-      <mesh position={[0, 0, -depth - 0.005]}>
-        <planeGeometry args={[widthM, heightM]} />
-        <meshBasicMaterial color="#c8d8df" />
+      {/* Sky base */}
+      <mesh position={[0, 0, skyZ]}>
+        <planeGeometry args={[widthM - 0.02, heightM - 0.02]} />
+        <meshBasicMaterial color="#cfdde6" />
       </mesh>
-      {/* Soft outdoor gradient via two stacked planes */}
-      <mesh position={[0, heightM * 0.25, -depth - 0.004]}>
-        <planeGeometry args={[widthM, heightM * 0.5]} />
-        <meshBasicMaterial color="#e6eef2" transparent opacity={0.65} />
+      {/* Soft sky gradient — brighter top */}
+      <mesh position={[0, heightM * 0.28, skyZ + 0.001]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.45]} />
+        <meshBasicMaterial color="#eaf2f6" transparent opacity={0.85} />
       </mesh>
-      <mesh position={[0, -heightM * 0.18, -depth - 0.004]}>
-        <planeGeometry args={[widthM, heightM * 0.55]} />
-        <meshBasicMaterial color="#a4c0aa" transparent opacity={0.55} />
+      {/* Distant horizon — meadow */}
+      <mesh position={[0, -heightM * 0.18, skyZ + 0.002]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.4]} />
+        <meshBasicMaterial color="#a8c0a8" />
       </mesh>
-      {/* Distant trees silhouette */}
-      <mesh position={[0, -heightM * 0.05, -depth - 0.003]}>
-        <planeGeometry args={[widthM, heightM * 0.3]} />
-        <meshBasicMaterial color="#7a9a82" transparent opacity={0.5} />
+      {/* Tree silhouette */}
+      <mesh position={[0, -heightM * 0.05, skyZ + 0.003]}>
+        <planeGeometry args={[widthM - 0.02, heightM * 0.22]} />
+        <meshBasicMaterial color="#7a9a82" transparent opacity={0.7} />
+      </mesh>
+      {/* Soft cloud blobs */}
+      <mesh position={[widthM * 0.18, heightM * 0.28, skyZ + 0.004]}>
+        <circleGeometry args={[heightM * 0.08, 24]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.55} />
+      </mesh>
+      <mesh position={[-widthM * 0.22, heightM * 0.34, skyZ + 0.004]}>
+        <circleGeometry args={[heightM * 0.05, 24]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
       </mesh>
 
       {/* Outer frame — 4 strips */}
@@ -330,19 +343,14 @@ function EuropeanWindow({
         <meshBasicMaterial color={frameDeep} transparent opacity={0.18} />
       </mesh>
 
-      {/* Window sill (Fensterbank) — protrudes inward */}
+      {/* Window sill (Fensterbank) — recessed so it doesn't collide with the curtain */}
       <mesh
-        position={[0, -heightM / 2 - 0.02, 0.08]}
+        position={[0, -heightM / 2 - 0.02, 0.04]}
         castShadow
         receiveShadow
       >
-        <boxGeometry args={[widthM + 0.16, 0.04, 0.22]} />
+        <boxGeometry args={[widthM + 0.16, 0.04, 0.12]} />
         <meshStandardMaterial color="#f1ead9" roughness={0.7} />
-      </mesh>
-      {/* Sill front edge highlight */}
-      <mesh position={[0, -heightM / 2 - 0.041, 0.19]}>
-        <boxGeometry args={[widthM + 0.16, 0.005, 0.005]} />
-        <meshStandardMaterial color="#d8cdb8" />
       </mesh>
     </group>
   );
