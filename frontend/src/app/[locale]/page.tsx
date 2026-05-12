@@ -85,6 +85,9 @@ function HomeContent() {
         </div>
       </section>
 
+      {/* Bestseller fabrics */}
+      <BestsellersSection />
+
       {/* Editorial grid */}
       <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
         <div className="mb-8 flex items-end justify-between">
@@ -111,9 +114,6 @@ function HomeContent() {
           ))}
         </div>
       </section>
-
-      {/* Bestseller fabrics */}
-      <BestsellersSection />
 
       {/* Three-column manufacturer story */}
       <section className="border-t border-stone-200 bg-stone-50">
