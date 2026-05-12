@@ -12,41 +12,6 @@ export default async function HomePage({
   return <HomeContent />;
 }
 
-// Editorial photo grid inspired by unique-factory.com.
-// Tiles use placeholder gradients keyed to interior color palettes;
-// swap in real photography by replacing `bg` with `bgImage` URLs later.
-type Tile = {
-  rowSpan?: number;
-  colSpan?: number;
-  bg: string;
-  caption?: string;
-};
-
-const TILES: Tile[][] = [
-  [
-    { bg: "linear-gradient(135deg,#5e5953 0%,#3c3a36 60%,#1f1d1a 100%)", caption: "Wohnzimmer Marmor" },
-    { bg: "linear-gradient(120deg,#c98c2a 0%,#9d5d28 100%)", colSpan: 2, caption: "Treppenhaus Ocker" },
-  ],
-  [
-    { bg: "linear-gradient(135deg,#a8b09a 0%,#7e8a72 100%)", caption: "Salon Salbei" },
-    { bg: "linear-gradient(140deg,#4a4842 0%,#28261f 100%)", colSpan: 2, caption: "Panorama Beton" },
-  ],
-  [
-    { bg: "linear-gradient(135deg,#cfc6b6 0%,#a89e8a 100%)", colSpan: 3, caption: "Lounge Bouclé" },
-  ],
-  [
-    { bg: "linear-gradient(135deg,#2c4760 0%,#1a2c3e 100%)", colSpan: 2, caption: "Suite Indigo" },
-    { bg: "linear-gradient(135deg,#e29a8a 0%,#b9685a 100%)", caption: "Café Terracotta" },
-  ],
-  [
-    { bg: "linear-gradient(135deg,#e7e2d5 0%,#c8c0ad 100%)", colSpan: 2, caption: "Atelier Licht" },
-    { bg: "linear-gradient(135deg,#465548 0%,#283128 100%)", caption: "Studio Forest" },
-  ],
-  [
-    { bg: "linear-gradient(135deg,#a3a98a 0%,#c98c2a 60%,#1f1d1a 100%)", colSpan: 3, caption: "Vorhang Konfigurator" },
-  ],
-];
-
 function HomeContent() {
   return (
     <div className="bg-white">
@@ -87,33 +52,6 @@ function HomeContent() {
 
       {/* Bestseller fabrics */}
       <BestsellersSection />
-
-      {/* Editorial grid */}
-      <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
-        <div className="mb-8 flex items-end justify-between">
-          <h2 className="font-serif text-2xl font-light tracking-wide text-stone-900">
-            Sie &amp; Wir
-          </h2>
-          <span className="text-[10px] font-medium uppercase tracking-[0.25em] text-stone-500">
-            Auswahl unserer Projekte
-          </span>
-        </div>
-        <div className="flex flex-col gap-2 lg:gap-3">
-          {TILES.map((row, ri) => (
-            <div key={ri} className="grid gap-2 lg:gap-3" style={{ gridTemplateColumns: `repeat(${row.reduce((s, t) => s + (t.colSpan ?? 1), 0)}, minmax(0, 1fr))` }}>
-              {row.map((t, ti) => (
-                <ConfiguratorTile
-                  key={ti}
-                  bg={t.bg}
-                  caption={t.caption}
-                  colSpan={t.colSpan}
-                  isHero={ri === TILES.length - 1}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* Three-column manufacturer story */}
       <section className="border-t border-stone-200 bg-stone-50">
@@ -156,46 +94,6 @@ function HomeContent() {
         </div>
       </section>
     </div>
-  );
-}
-
-function ConfiguratorTile({
-  bg,
-  caption,
-  colSpan = 1,
-  isHero,
-}: {
-  bg: string;
-  caption?: string;
-  colSpan?: number;
-  isHero?: boolean;
-}) {
-  return (
-    <Link
-      href="/curtain-configurator"
-      className="group relative block aspect-[4/3] overflow-hidden"
-      style={{ gridColumn: `span ${colSpan} / span ${colSpan}` }}
-    >
-      <div
-        className="absolute inset-0 transition-transform duration-700 group-hover:scale-[1.03]"
-        style={{ background: bg }}
-      />
-      <div className="absolute inset-0 bg-stone-900/0 transition group-hover:bg-stone-900/15" />
-      {caption && (
-        <div className="absolute inset-x-0 bottom-0 p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/90 mix-blend-difference">
-              {caption}
-            </span>
-            {isHero && (
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white drop-shadow">
-                Konfigurator →
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-    </Link>
   );
 }
 
