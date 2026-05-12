@@ -123,23 +123,22 @@ export default function CartDrawer() {
                     <p className="text-sm font-semibold text-stone-900">{formatPrice(item.totalPrice)}</p>
 
                     {item.customization && Object.keys(item.customization).length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <dl className="mt-1.5 divide-y divide-stone-100 border-t border-stone-100 text-[10px]">
                         {formatCustomizationForDisplay(item.customization).map((it) => (
-                          <span
-                            key={it.key}
-                            className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-600"
-                          >
-                            {it.swatch && (
-                              <span
-                                className="inline-block h-2.5 w-2.5 rounded-full border border-stone-300"
-                                style={{ backgroundColor: it.swatch }}
-                              />
-                            )}
-                            <span className="font-medium text-stone-500">{it.label}:</span>
-                            <span>{it.value}</span>
-                          </span>
+                          <div key={it.key} className="flex items-center justify-between gap-2 px-0.5 py-0.5">
+                            <dt className="text-stone-500">{it.label}</dt>
+                            <dd className="flex items-center gap-1 font-medium text-stone-800">
+                              {it.swatch && (
+                                <span
+                                  className="inline-block h-2.5 w-2.5 rounded-full border border-stone-300"
+                                  style={{ backgroundColor: it.swatch }}
+                                />
+                              )}
+                              <span>{it.value}</span>
+                            </dd>
+                          </div>
                         ))}
-                      </div>
+                      </dl>
                     )}
 
                     <div className="mt-1.5 flex items-center justify-between">

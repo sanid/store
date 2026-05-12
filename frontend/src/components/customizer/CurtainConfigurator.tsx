@@ -109,16 +109,16 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
     if (!gl) return "";
     try {
       const src = gl.domElement;
-      const maxW = 720;
-      const ratio = src.width > 0 ? src.height / src.width : 0.6;
-      const w = Math.min(maxW, src.width);
-      const h = Math.round(w * ratio);
+      const size = 400;
+      const side = Math.min(src.width, src.height);
+      const sx = (src.width - side) / 2;
+      const sy = (src.height - side) / 2;
       const off = document.createElement("canvas");
-      off.width = w;
-      off.height = h;
+      off.width = size;
+      off.height = size;
       const ctx = off.getContext("2d");
       if (!ctx) return src.toDataURL("image/png");
-      ctx.drawImage(src, 0, 0, w, h);
+      ctx.drawImage(src, sx, sy, side, side, 0, 0, size, size);
       return off.toDataURL("image/jpeg", 0.85);
     } catch {
       return "";

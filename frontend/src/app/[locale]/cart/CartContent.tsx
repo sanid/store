@@ -69,23 +69,22 @@ export default function CartContent() {
 
                 {item.customization &&
                   Object.keys(item.customization).length > 0 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
+                    <dl className="mt-2 divide-y divide-stone-100 border-t border-stone-100 text-[11px]">
                       {formatCustomizationForDisplay(item.customization).map((it) => (
-                        <span
-                          key={it.key}
-                          className="inline-flex items-center gap-1 rounded bg-surface px-1.5 py-0.5 text-[10px] text-muted"
-                        >
-                          {it.swatch && (
-                            <span
-                              className="inline-block h-2.5 w-2.5 rounded-full border border-border"
-                              style={{ backgroundColor: it.swatch }}
-                            />
-                          )}
-                          <span className="font-medium">{it.label}:</span>
-                          <span>{it.value}</span>
-                        </span>
+                        <div key={it.key} className="flex items-center justify-between gap-3 px-1 py-1">
+                          <dt className="text-stone-500">{it.label}</dt>
+                          <dd className="flex items-center gap-1.5 font-medium text-stone-800">
+                            {it.swatch && (
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-full border border-stone-300"
+                                style={{ backgroundColor: it.swatch }}
+                              />
+                            )}
+                            <span>{it.value}</span>
+                          </dd>
+                        </div>
                       ))}
-                    </div>
+                    </dl>
                   )}
 
                 <div className="mt-2 flex items-center gap-3">

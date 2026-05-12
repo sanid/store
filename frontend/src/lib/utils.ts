@@ -86,7 +86,9 @@ export function formatCustomizationForDisplay(
   const out: CustomizationDisplayItem[] = [];
   for (const [key, raw] of Object.entries(customization)) {
     if (raw === undefined || raw === null || raw === "") continue;
-    if (key === "fabricLabel" || key === "fabricId" || key === "name" || key === "remark") continue;
+    if (key === "fabricLabel" || key === "fabricId" || key === "name" || key === "remark" || key === "side") continue;
+    if (key === "accessory" && raw === "none") continue;
+    if (key === "lining" && raw === "none") continue;
     const label = FURNITURE_LABELS[key] ?? key;
 
     if (key === "fabric" && typeof raw === "string" && raw.startsWith("#")) {
