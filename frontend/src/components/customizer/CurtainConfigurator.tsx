@@ -172,7 +172,7 @@ export default function CurtainConfigurator() {
               value={config.name}
               onChange={(e) => update("name", e.target.value)}
               placeholder="z.B. Wohnzimmer"
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm focus:border-stone-900 focus:outline-none"
             />
 
             <Label className="mt-4">Seite</Label>
@@ -183,7 +183,7 @@ export default function CurtainConfigurator() {
                   onClick={() => update("side", s.id)}
                   className={`relative cursor-pointer rounded-xl border px-3 py-3 text-xs font-medium transition ${
                     config.side === s.id
-                      ? "border-emerald-600 bg-stone-900 text-white"
+                      ? "border-stone-900 bg-stone-900 text-white"
                       : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
                   }`}
                 >
@@ -191,7 +191,7 @@ export default function CurtainConfigurator() {
                   <div className="text-base leading-none mb-1.5 mt-1">{s.glyph}</div>
                   {s.label}
                   {config.side === s.id && (
-                    <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">✓</span>
+                    <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-stone-900 text-[10px] text-white">✓</span>
                   )}
                 </button>
               ))}
@@ -207,7 +207,7 @@ export default function CurtainConfigurator() {
                     max={600}
                     value={config.width}
                     onChange={(e) => update("width", Math.max(40, Math.min(600, Number(e.target.value) || 0)))}
-                    className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-stone-900 focus:outline-none"
                   />
                   <span className="text-xs text-stone-500">cm</span>
                 </div>
@@ -221,7 +221,7 @@ export default function CurtainConfigurator() {
                     max={400}
                     value={config.height}
                     onChange={(e) => update("height", Math.max(40, Math.min(400, Number(e.target.value) || 0)))}
-                    className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-emerald-500 focus:outline-none"
+                    className="w-20 rounded-lg border border-stone-200 px-2 py-1.5 text-sm focus:border-stone-900 focus:outline-none"
                   />
                   <span className="text-xs text-stone-500">cm</span>
                 </div>
@@ -290,7 +290,7 @@ export default function CurtainConfigurator() {
 
                 <button
                   onClick={handleAdd}
-                  className="mt-3 w-full cursor-pointer rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                  className="mt-3 w-full cursor-pointer rounded-xl bg-stone-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-stone-700"
                 >
                   {added ? "Hinzugefügt!" : "in den Warenkorb"}
                 </button>
@@ -305,7 +305,7 @@ export default function CurtainConfigurator() {
                   onClick={() => update("reserve", r.id)}
                   className={`cursor-pointer rounded-xl border px-2 py-2.5 text-[11px] font-medium transition ${
                     config.reserve === r.id
-                      ? "border-emerald-600 bg-stone-900 text-white"
+                      ? "border-stone-900 bg-stone-900 text-white"
                       : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
                   }`}
                 >
@@ -322,14 +322,14 @@ export default function CurtainConfigurator() {
                   onClick={() => update("lining", l.id)}
                   className={`relative cursor-pointer rounded-xl border px-1 py-2.5 text-[10px] font-medium transition ${
                     config.lining === l.id
-                      ? "border-emerald-600 bg-stone-900 text-white"
+                      ? "border-stone-900 bg-stone-900 text-white"
                       : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
                   }`}
                 >
                   <div className="text-sm leading-none mb-1">{l.icon}</div>
                   {l.label}
                   {l.surcharge > 0 && (
-                    <div className={`text-[9px] ${config.lining === l.id ? "text-emerald-300" : "text-stone-500"}`}>
+                    <div className={`text-[9px] ${config.lining === l.id ? "text-stone-400" : "text-stone-500"}`}>
                       +{formatPrice(l.surcharge)}
                     </div>
                   )}
@@ -348,7 +348,7 @@ export default function CurtainConfigurator() {
                   onClick={() => update("accessory", a.id)}
                   className={`cursor-pointer rounded-xl border px-2 py-2.5 text-[11px] font-medium transition ${
                     config.accessory === a.id
-                      ? "border-emerald-600 bg-stone-900 text-white"
+                      ? "border-stone-900 bg-stone-900 text-white"
                       : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
                   }`}
                 >
@@ -365,7 +365,7 @@ export default function CurtainConfigurator() {
               value={config.remark}
               onChange={(e) => update("remark", e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm focus:border-stone-900 focus:outline-none"
               placeholder="Anmerkungen zur Bestellung"
             />
           </NumberedStep>
@@ -428,17 +428,17 @@ function CardOption({
     <button
       onClick={onClick}
       className={`relative cursor-pointer rounded-xl border px-3 py-2.5 text-left transition ${
-        active ? "border-emerald-600 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
+        active ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-700 hover:border-stone-300"
       }`}
     >
       <span className="absolute left-2 top-2 text-[10px] opacity-50">?</span>
       <div className="mt-2 text-xl tracking-widest leading-none">{preview}</div>
       <div className="mt-2 text-xs font-semibold">{label}</div>
       {surcharge > 0 && (
-        <div className={`text-[10px] ${active ? "text-emerald-300" : "text-stone-500"}`}>+{formatPrice(surcharge)}</div>
+        <div className={`text-[10px] ${active ? "text-stone-400" : "text-stone-500"}`}>+{formatPrice(surcharge)}</div>
       )}
       {active && (
-        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] text-white">✓</span>
+        <span className="absolute right-2 top-2 flex h-4 w-4 items-center justify-center rounded-full bg-stone-900 text-[10px] text-white">✓</span>
       )}
     </button>
   );

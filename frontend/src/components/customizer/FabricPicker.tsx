@@ -112,7 +112,7 @@ export default function FabricPicker({ open, selectedId, onClose, onSelect }: Pr
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Stoff suchen..."
-              className="w-64 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              className="w-64 rounded-full border border-stone-200 bg-white px-4 py-2 text-sm focus:border-stone-900 focus:outline-none"
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400">⌕</span>
           </div>
@@ -128,7 +128,7 @@ export default function FabricPicker({ open, selectedId, onClose, onSelect }: Pr
                 <div
                   key={key}
                   className={`group relative cursor-pointer overflow-hidden rounded-xl border bg-white transition hover:-translate-y-0.5 hover:shadow-lg ${
-                    isSelected ? "border-emerald-500 ring-2 ring-emerald-500" : "border-stone-200"
+                    isSelected ? "border-stone-900 ring-2 ring-stone-900" : "border-stone-200"
                   }`}
                   onClick={() => onSelect(head)}
                 >
@@ -215,7 +215,7 @@ function Dropdown({
       <button
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-          value ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-stone-200 text-stone-700 hover:border-stone-300"
+          value ? "border-stone-900 bg-stone-50 text-stone-700" : "border-stone-200 text-stone-700 hover:border-stone-300"
         }`}
       >
         {value ? options.find((o) => o.id === value)?.label ?? label : label}
@@ -242,7 +242,7 @@ function Dropdown({
                   setOpen(false);
                 }}
                 className={`block w-full rounded-lg px-3 py-1.5 text-left text-xs transition ${
-                  value === o.id ? "bg-emerald-50 text-emerald-700" : "text-stone-700 hover:bg-stone-50"
+                  value === o.id ? "bg-stone-50 text-stone-700" : "text-stone-700 hover:bg-stone-50"
                 }`}
               >
                 {o.label}
