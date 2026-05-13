@@ -37,6 +37,9 @@ const SIDES: { id: CurtainSide; label: string; glyph: string }[] = [
 ];
 
 const HEADERS: { id: CurtainHeader; label: string; surcharge: number; preview: string }[] = [
+  { id: "eyelet", label: "Ösen", surcharge: HEADER_PRICE.eyelet, preview: "◯◯◯" },
+  { id: "single-pinch", label: "1er Falte", surcharge: HEADER_PRICE["single-pinch"], preview: "││││" },
+  { id: "pencil", label: "Bleistift", surcharge: HEADER_PRICE.pencil, preview: "⁞⁞⁞⁞" },
   { id: "wave", label: "Wellenband", surcharge: HEADER_PRICE.wave, preview: "〜〜〜" },
   { id: "flemish", label: "Flämische Falte", surcharge: HEADER_PRICE.flemish, preview: "⏝⏝⏝" },
   { id: "triple-pinch", label: "3er Falte", surcharge: HEADER_PRICE["triple-pinch"], preview: "ⵜⵜⵜ" },

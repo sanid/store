@@ -1,5 +1,5 @@
 export type CurtainSide = "left" | "right" | "both";
-export type CurtainHeader = "wave" | "flemish" | "triple-pinch";
+export type CurtainHeader = "wave" | "flemish" | "triple-pinch" | "eyelet" | "single-pinch" | "pencil";
 export type FabricReserve = "none" | "low" | "normal" | "high";
 export type CurtainLining = "none" | "thermo" | "acoustic" | "dimout" | "blackout";
 export type CurtainAccessory = "none" | "glider-4mm" | "glider-6mm";
@@ -141,6 +141,9 @@ export const HEADER_PRICE: Record<CurtainHeader, number> = {
   wave: 3750,
   flemish: 0,
   "triple-pinch": 0,
+  eyelet: 3583,
+  "single-pinch": -1900,
+  pencil: 0,
 };
 
 export const LINING_PRICE: Record<CurtainLining, number> = {
