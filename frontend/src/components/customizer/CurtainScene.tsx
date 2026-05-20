@@ -1224,10 +1224,6 @@ export default function CurtainScene({ config, fabric, onReady, compact = false 
         onChange={(e) => {
           const cam = e?.target.object;
           if (!cam) return;
-          // eslint-disable-next-line no-console
-          console.log(
-            `camera pos: [${cam.position.x.toFixed(3)}, ${cam.position.y.toFixed(3)}, ${cam.position.z.toFixed(3)}]  fov: ${cam.fov}`
-          );
         }}
       />
     </Canvas>
