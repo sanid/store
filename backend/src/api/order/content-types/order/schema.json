@@ -73,6 +73,10 @@
     },
     "invoicedAt": {
       "type": "datetime"
+    },
+    "dhlShipmentId": {
+      "type": "string",
+      "private": true
     }
   }
 }

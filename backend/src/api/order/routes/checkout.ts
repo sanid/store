@@ -79,5 +79,10 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'POST',
+      path: '/orders/:documentId/dhl-label',
+      handler: 'order.createDhlLabel',
+    },
   ],
 };

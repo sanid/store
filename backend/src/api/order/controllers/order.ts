@@ -6,6 +6,7 @@ import { buildProductionDataForOrder } from '../services/production';
 import { generateProductionPdf } from '../services/production-pdf';
 import { generateInvoicePdf } from '../services/invoice-pdf';
 import { priceCurtain } from '../services/curtain-pricing';
+import { createDhlLabel, isDhlConfigured } from '../services/dhl';
 
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeKey ? new Stripe(stripeKey) : null;
@@ -979,6 +980,72 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
     } catch (err: any) {
       strapi.log.error('Update tracking failed:', err);
       ctx.internalServerError('Failed to update tracking');
+    }
+  },
+
+  async createDhlLabel(ctx: any) {
+    if (!isDhlConfigured()) {
+      return ctx.internalServerError('DHL shipping is not configured');
+    }
+
+    const { documentId } = ctx.params;
+    const body = ctx.request.body || {};
+    const weightKg = Number(body.weightKg) || undefined;
+    const lengthCm = Number(body.lengthCm) || undefined;
+    const widthCm = Number(body.widthCm) || undefined;
+    const heightCm = Number(body.heightCm) || undefined;
+
+    try {
+      const order = await strapi.documents('api::order.order').findOne({
+        documentId,
+      });
+
+      if (!order) return ctx.notFound('Order not found');
+
+      if (order.status !== 'paid' && order.status !== 'processing') {
+        return ctx.badRequest('Order must be paid or processing to create a DHL label');
+      }
+
+      const addr = (order.shippingAddress as Record<string, string>) || {};
+      const nameParts = `${addr.firstName || ''} ${addr.lastName || ''}`.trim() || order.customerName || '';
+      const [firstName, ...rest] = nameParts.split(' ');
+
+      const result = await createDhlLabel({
+        consignee: {
+          firstName: firstName || '',
+          lastName: rest.join(' ') || '',
+          street: addr.street || '',
+          postalCode: addr.postalCode || '',
+          city: addr.city || '',
+          country: addr.country || 'DE',
+          email: order.customerEmail || undefined,
+        },
+        shipmentDetails: {
+          weightKg,
+          lengthCm,
+          widthCm,
+          heightCm,
+        },
+      });
+
+      await strapi.documents('api::order.order').update(documentId, {
+        data: {
+          trackingNumber: result.trackingNumber,
+          trackingCarrier: 'DHL',
+          dhlShipmentId: result.shipmentNumber,
+        },
+      });
+
+      const labelBuffer = Buffer.from(result.labelB64, 'base64');
+
+      ctx.set('Content-Type', 'application/pdf');
+      ctx.set('Content-Disposition', `attachment; filename="dhl-label-${documentId.slice(-12)}.pdf"`);
+      ctx.body = labelBuffer;
+
+      strapi.log.info(`DHL label created for order ${documentId}: ${result.trackingNumber}`);
+    } catch (err: any) {
+      strapi.log.error('DHL label creation failed:', err);
+      ctx.internalServerError(err.message || 'Failed to create DHL label');
     }
   },
 }));
