@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type * as THREE from "three";
 import {
@@ -27,6 +27,33 @@ const CurtainScene = dynamic(() => import("./CurtainScene"), {
     <div className="h-full w-full animate-pulse bg-gradient-to-br from-stone-100 to-stone-200" />
   ),
 });
+
+class SceneErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: unknown) {
+    // eslint-disable-next-line no-console
+    console.error("CurtainScene crashed", error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-stone-100 to-stone-200 p-6 text-center text-xs text-stone-500">
+          3D-Vorschau auf diesem Gerät nicht verfügbar.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const DRAFT_KEY = "uf:curtain-draft";
 
@@ -66,7 +93,7 @@ const ACCESSORIES: { id: CurtainAccessory; label: string; surcharge: number }[] 
   { id: "glider-6mm", label: "Clic-Gleiter 6 mm", surcharge: ACCESSORY_PRICE["glider-6mm"] },
 ];
 
-export default function CurtainConfigurator({ initialFabricId }: { initialFabricId?: string } = {}) {
+export default function CurtainConfigurator({ initialFabricId, product }: { initialFabricId?: string; product?: import("@/lib/types").Product } = {}) {
   const { addItem, setCartOpen } = useCart();
   const [config, setConfig] = useState<CurtainConfig>(defaultCurtainConfig);
   const [hydrated, setHydrated] = useState(false);
@@ -74,6 +101,33 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
   const [added, setAdded] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const glRef = useRef<THREE.WebGLRenderer | null>(null);
+  const [compact, setCompact] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      if (!mq.matches) {
+        setCompact(false);
+        return;
+      }
+      setCompact(window.scrollY > 80);
+    };
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    mq.addEventListener("change", update);
+    update();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      mq.removeEventListener("change", update);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   useEffect(() => {
     let next: CurtainConfig | null = null;
@@ -142,8 +196,8 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
     if (!fabric) return;
     const preview = capturePreview();
     addItem({
-      productId: "curtain",
-      documentId: "curtain-custom",
+      productId: String(product?.id ?? "curtain"),
+      documentId: product?.documentId ?? "curtain-custom",
       name: config.name || `Vorhang ${fabric.collection} ${fabric.colorName}`,
       basePrice: unitPrice,
       totalPrice,
@@ -173,9 +227,25 @@ export default function CurtainConfigurator({ initialFabricId }: { initialFabric
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px] min-h-[calc(100vh-57px)] bg-white">
       <div className="relative bg-gradient-to-br from-stone-50 to-stone-100">
-        <div className="sticky top-[57px] h-[55vh] lg:h-[calc(100vh-57px)]">
-          <CurtainScene config={config} fabric={fabric} onReady={handleReady} />
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/90 px-4 py-1.5 text-xs text-stone-500 shadow-sm backdrop-blur">
+        {/* Spacer keeps document flow when the canvas becomes fixed on mobile.
+            Shrinks with the canvas so there's no empty gap once compact. */}
+        <div
+          className={`transition-[height] duration-500 ease-out lg:h-0 ${
+            compact ? "h-[110px]" : "h-[55vh]"
+          }`}
+          aria-hidden
+        />
+        <div
+          className={`left-0 right-0 z-30 transition-all duration-500 ease-out lg:sticky lg:top-[57px] lg:h-[calc(100vh-57px)] ${
+            compact
+              ? "fixed top-[57px] h-[110px] shadow-md"
+              : "fixed top-[57px] h-[55vh]"
+          }`}
+        >
+          <SceneErrorBoundary>
+            <CurtainScene config={config} fabric={fabric} onReady={handleReady} compact={compact} />
+          </SceneErrorBoundary>
+          <div className="absolute bottom-4 left-1/2 hidden -translate-x-1/2 rounded-full bg-white/90 px-4 py-1.5 text-xs text-stone-500 shadow-sm backdrop-blur md:block">
             Ziehen zum Drehen · Scrollen zum Zoomen
           </div>
         </div>

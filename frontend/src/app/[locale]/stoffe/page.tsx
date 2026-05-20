@@ -168,13 +168,17 @@ function CollectionCard({ items }: { items: FabricSwatch[] }) {
     >
       <div
         className="relative h-48 w-full transition-colors duration-200"
-        style={{ backgroundColor: head.hex }}
+        style={{ backgroundColor: head.textureUrl ? undefined : head.hex }}
       >
         {head.pattern === "photo" && (
           <img
-            src="/pattern.jpg"
+            src={head.textureUrl ?? "/pattern.jpg"}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover opacity-60 mix-blend-multiply"
+            className={
+              head.textureUrl
+                ? "absolute inset-0 h-full w-full object-cover"
+                : "absolute inset-0 h-full w-full object-cover opacity-60 mix-blend-multiply"
+            }
           />
         )}
         <div

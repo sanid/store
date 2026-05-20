@@ -1,5 +1,8 @@
 import { setRequestLocale } from "next-intl/server";
 import CurtainConfigurator from "@/components/customizer/CurtainConfigurator";
+import { getProductBySlug } from "@/lib/strapi";
+
+const CURTAIN_SLUG = "curtain-custom";
 
 export const metadata = {
   title: "Vorhang Konfigurator – Unique Factory",
@@ -18,5 +21,7 @@ export default async function CurtainConfiguratorPage({
   const { fabric } = await searchParams;
   setRequestLocale(locale);
 
-  return <CurtainConfigurator initialFabricId={fabric} />;
+  const product = await getProductBySlug(CURTAIN_SLUG);
+
+  return <CurtainConfigurator initialFabricId={fabric} product={product ?? undefined} />;
 }

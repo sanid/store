@@ -19,7 +19,7 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   return (
     <Link
-      href={`/products/${product.slug}`}
+      href={{ pathname: "/products/[slug]", params: { slug: product.slug } }}
       className="group flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white transition-all duration-200 hover:border-stone-300 hover:shadow-lg hover:shadow-stone-200/50"
     >
       <div className="relative aspect-square overflow-hidden bg-stone-100">

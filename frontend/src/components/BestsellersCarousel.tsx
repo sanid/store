@@ -76,13 +76,13 @@ export default function BestsellersCarousel() {
           <h2 className="font-serif text-3xl font-light tracking-tight text-stone-900">
             Unsere Bestseller &amp; Empfehlungen
           </h2>
-          <div className="mt-2 flex items-center justify-between">
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-stone-500">
               Die beliebtesten Stoffe unserer Kunden
             </p>
             <Link
               href="/stoffe"
-              className="inline-flex items-center gap-2 bg-stone-900 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-white transition hover:bg-stone-700"
+              className="inline-flex w-fit items-center gap-2 bg-stone-900 px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-white transition hover:bg-stone-700"
             >
               Alle Stoffe ansehen
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -182,14 +182,21 @@ function FabricCard({ fabric }: { fabric: FabricSwatch }) {
   return (
     <Link
       href={{ pathname: "/curtain-configurator", query: { fabric: fabric.id } }}
-      className="group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden border border-stone-200 bg-white transition hover:shadow-lg"
+      className="group relative flex w-[170px] shrink-0 snap-start flex-col overflow-hidden border border-stone-200 bg-white transition hover:shadow-lg sm:w-[220px] lg:w-[260px]"
     >
-      <div className="relative h-72 w-full overflow-hidden" style={{ backgroundColor: fabric.hex }}>
+      <div
+        className="relative h-48 w-full overflow-hidden sm:h-60 lg:h-72"
+        style={{ backgroundColor: fabric.textureUrl ? undefined : fabric.hex }}
+      >
         {fabric.pattern === "photo" && (
           <img
-            src="/pattern.jpg"
+            src={fabric.textureUrl ?? "/pattern.jpg"}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover opacity-60 mix-blend-multiply"
+            className={
+              fabric.textureUrl
+                ? "absolute inset-0 h-full w-full object-cover"
+                : "absolute inset-0 h-full w-full object-cover opacity-60 mix-blend-multiply"
+            }
           />
         )}
         <div

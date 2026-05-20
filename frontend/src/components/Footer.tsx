@@ -53,6 +53,11 @@ export default function Footer() {
                   Versand &amp; Zahlung
                 </Link>
               </li>
+              <li>
+                <Link href="/order-lookup" className="text-sm text-stone-300 transition hover:text-white">
+                  Bestellung verfolgen
+                </Link>
+              </li>
             </ul>
           </div>
 

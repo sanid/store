@@ -31,6 +31,7 @@ export interface CuttingListPart {
 }
 
 export interface ProductionItem {
+  kind: 'furniture' | 'curtain';
   productName: string;
   quantity: number;
   customization: FurnitureCustomization;
@@ -194,6 +195,7 @@ export function buildProductionItem(
   const estimatedWeightKg = Math.round(totalSheetAreaM2 * 7.5 * 10) / 10;
 
   return {
+    kind: 'furniture',
     productName,
     quantity,
     customization: c,
@@ -201,6 +203,123 @@ export function buildProductionItem(
     hardware,
     totalSheetAreaM2,
     estimatedWeightKg,
+  };
+}
+
+function isCurtain(c: Record<string, unknown> | null | undefined): boolean {
+  if (!c) return false;
+  return (
+    typeof c.fabricId === 'string' &&
+    typeof c.width === 'number' &&
+    typeof c.height === 'number' &&
+    typeof c.header === 'string'
+  );
+}
+
+const RESERVE_FACTOR: Record<string, number> = {
+  none: 1.0,
+  low: 1.4,
+  normal: 1.8,
+  high: 2.4,
+};
+
+const HEADER_LABEL: Record<string, string> = {
+  wave: 'Wellenband',
+  flemish: 'Flämische Falte',
+  'triple-pinch': 'Dreifachfalte',
+  eyelet: 'Ösen',
+  'single-pinch': 'Einfachfalte',
+  pencil: 'Kräuselband',
+};
+
+const LINING_LABEL: Record<string, string> = {
+  none: 'ohne Futter',
+  thermo: 'Thermofutter',
+  acoustic: 'Akustikfutter',
+  dimout: 'Dimout-Futter',
+  blackout: 'Blackout-Futter',
+};
+
+const ACCESSORY_LABEL: Record<string, string> = {
+  none: 'keine',
+  'glider-4mm': 'Clic-Gleiter 4 mm',
+  'glider-6mm': 'Clic-Gleiter 6 mm',
+};
+
+export function buildCurtainProductionItem(
+  productName: string,
+  quantity: number,
+  raw: Record<string, unknown> | null | undefined
+): ProductionItem | null {
+  if (!isCurtain(raw)) return null;
+  const c = raw as Record<string, unknown>;
+
+  const widthCm = Number(c.width) || 100;
+  const heightCm = Number(c.height) || 100;
+  const side = String(c.side || 'both');
+  const reserve = String(c.reserve || 'high');
+  const lining = String(c.lining || 'none');
+  const accessory = String(c.accessory || 'none');
+  const header = String(c.header || 'triple-pinch');
+
+  const sides = side === 'both' ? 2 : 1;
+  const reserveFactor = RESERVE_FACTOR[reserve] ?? 1.8;
+  const fabricWidthM = (widthCm / 100) * reserveFactor * sides;
+  const fabricHeightM = heightCm / 100 + 0.3;
+  const meters = Math.max(0.5, fabricWidthM * fabricHeightM);
+
+  const panelWidthMm = Math.round((widthCm / sides) * reserveFactor * 10);
+  const panelHeightMm = Math.round((heightCm + 30) * 10);
+  const fabricLabel = String(c.fabricLabel || c.fabricId || 'Stoff');
+
+  const cuttingList: CuttingListPart[] = [
+    {
+      label: `Stoffbahn (${HEADER_LABEL[header] ?? header})`,
+      quantity: sides,
+      widthMm: panelWidthMm,
+      heightMm: panelHeightMm,
+      depthMm: 0,
+      material: fabricLabel,
+      edgeBanding: false,
+      notes: `Stoffbedarf gesamt: ${meters.toFixed(2)} m`,
+    },
+  ];
+
+  if (lining !== 'none') {
+    cuttingList.push({
+      label: `Futter (${LINING_LABEL[lining] ?? lining})`,
+      quantity: sides,
+      widthMm: panelWidthMm,
+      heightMm: panelHeightMm - 50,
+      depthMm: 0,
+      material: LINING_LABEL[lining] ?? lining,
+      edgeBanding: false,
+      notes: 'separat gesäumt',
+    });
+  }
+
+  const hardware: { label: string; quantity: number }[] = [
+    { label: HEADER_LABEL[header] ?? header, quantity: sides },
+    { label: 'Gardinenhaken', quantity: Math.ceil((widthCm * reserveFactor) / 8) * sides },
+    { label: 'Bleiband (m)', quantity: Math.ceil((widthCm / 100) * sides) },
+  ];
+
+  if (accessory !== 'none') {
+    hardware.push({
+      label: ACCESSORY_LABEL[accessory] ?? accessory,
+      quantity: Math.ceil((widthCm * reserveFactor) / 8) * sides,
+    });
+  }
+
+  return {
+    kind: 'curtain',
+    productName,
+    quantity,
+    customization: c as unknown as FurnitureCustomization,
+    cuttingList,
+    hardware,
+    totalSheetAreaM2: Math.round(meters * 100) / 100,
+    estimatedWeightKg: Math.round(meters * 0.45 * 10) / 10,
   };
 }
 
@@ -214,7 +333,9 @@ export function buildProductionDataForOrder(
 ): { items: ProductionItem[]; hasFurniture: boolean } {
   const items: ProductionItem[] = [];
   for (const line of orderLines) {
-    const p = buildProductionItem(line.name, line.quantity, line.customization);
+    const p =
+      buildProductionItem(line.name, line.quantity, line.customization) ??
+      buildCurtainProductionItem(line.name, line.quantity, line.customization);
     if (p) items.push(p);
   }
   return { items, hasFurniture: items.length > 0 };

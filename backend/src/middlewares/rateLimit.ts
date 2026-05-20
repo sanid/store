@@ -1,8 +1,9 @@
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-export default (config: { windowMs?: number; max?: number } = {}) => {
+export default (config: { windowMs?: number; max?: number; paths?: string } = {}) => {
   const windowMs = config.windowMs || 60 * 1000;
   const max = config.max || 10;
+  const pathRegex = config.paths ? new RegExp(config.paths) : null;
 
   setInterval(() => {
     const now = Date.now();
@@ -12,6 +13,10 @@ export default (config: { windowMs?: number; max?: number } = {}) => {
   }, windowMs);
 
   return async (ctx: any, next: any) => {
+    if (pathRegex && !pathRegex.test(ctx.request.path)) {
+      return await next();
+    }
+
     const ip = ctx.request.ip || ctx.ip || 'unknown';
     const key = `${ip}:${ctx.request.path}`;
     const now = Date.now();

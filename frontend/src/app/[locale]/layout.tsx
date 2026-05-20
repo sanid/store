@@ -7,6 +7,8 @@ import { CartProvider } from "@/context/CartContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
+import CookieConsent from "@/components/CookieConsent";
+import DevGate from "@/components/DevGate";
 
 export const metadata: Metadata = {
   title: {
@@ -31,8 +33,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
   },
   robots: {
-    index: true,
-    follow: true,
+    index: process.env.NODE_ENV === "production",
+    follow: process.env.NODE_ENV === "production",
   },
 };
 
@@ -61,12 +63,15 @@ export default async function LocaleLayout({
         Skip to content
       </a>
       <NextIntlClientProvider>
-        <CartProvider>
-          <Navbar />
-          <CartDrawer />
-          <main id="main-content" className="flex-1">{children}</main>
-          <Footer />
-        </CartProvider>
+        <DevGate>
+          <CartProvider>
+            <Navbar />
+            <CartDrawer />
+            <main id="main-content" className="flex-1">{children}</main>
+            <Footer />
+            <CookieConsent />
+          </CartProvider>
+        </DevGate>
       </NextIntlClientProvider>
     </>
   );

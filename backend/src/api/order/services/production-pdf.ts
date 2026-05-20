@@ -31,6 +31,16 @@ const FURNITURE_LABELS: Record<string, string> = {
   color: 'Farbe',
   cells: 'Fächer',
   density: 'Dichte',
+  fabricId: 'Stoff-ID',
+  fabricLabel: 'Stoff',
+  fabric: 'Stofffarbe',
+  side: 'Seite',
+  header: 'Faltenband',
+  reserve: 'Stoffzugabe',
+  lining: 'Futter',
+  accessory: 'Zubehör',
+  name: 'Bezeichnung',
+  remark: 'Anmerkung',
 };
 
 const FURNITURE_VALUES: Record<string, string> = {
@@ -45,6 +55,25 @@ const FURNITURE_VALUES: Record<string, string> = {
   plywood: 'Multiplex',
   veneer: 'Furnier',
   color: 'Farbe',
+  left: 'links',
+  right: 'rechts',
+  both: 'beidseitig',
+  wave: 'Wellenband',
+  flemish: 'Flämische Falte',
+  'triple-pinch': 'Dreifachfalte',
+  eyelet: 'Ösen',
+  'single-pinch': 'Einfachfalte',
+  pencil: 'Kräuselband',
+  none: 'keine',
+  low: 'gering',
+  normal: 'normal',
+  high: 'hoch',
+  thermo: 'Thermofutter',
+  acoustic: 'Akustik',
+  dimout: 'Dimout',
+  blackout: 'Blackout',
+  'glider-4mm': 'Clic-Gleiter 4 mm',
+  'glider-6mm': 'Clic-Gleiter 6 mm',
 };
 
 function formatCustomization(c: Record<string, unknown>): Array<[string, string]> {
@@ -95,7 +124,11 @@ export function generateProductionPdf(
   productionItems: ProductionItem[]
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true });
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 48, bottom: 30, left: 48, right: 48 },
+      bufferPages: true,
+    });
     const chunks: Buffer[] = [];
     doc.on('data', (c) => chunks.push(c as Buffer));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -199,23 +232,33 @@ export function generateProductionPdf(
 
       doc.y = Math.max(previewY + previewH, tableY) + 18;
 
-      // Cutting list
+      const isCurtain = item.kind === 'curtain';
+
+      // Cutting list / fabric list
       doc
         .fillColor('#111827')
         .font('Helvetica-Bold')
         .fontSize(12)
-        .text('Zuschnittliste', 48, doc.y);
+        .text(isCurtain ? 'Stoffliste' : 'Zuschnittliste', 48, doc.y);
       doc.moveDown(0.3);
 
-      const cols = [
-        { label: 'Teil', w: 165 },
-        { label: 'Stk', w: 30 },
-        { label: 'B (mm)', w: 55 },
-        { label: 'H (mm)', w: 55 },
-        { label: 'T (mm)', w: 55 },
-        { label: 'Material', w: 95 },
-        { label: 'Kante', w: 40 },
-      ];
+      const cols = isCurtain
+        ? [
+            { label: 'Teil', w: 210 },
+            { label: 'Stk', w: 40 },
+            { label: 'B (cm)', w: 60 },
+            { label: 'H (cm)', w: 60 },
+            { label: 'Material', w: 129 },
+          ]
+        : [
+            { label: 'Teil', w: 165 },
+            { label: 'Stk', w: 30 },
+            { label: 'B (mm)', w: 55 },
+            { label: 'H (mm)', w: 55 },
+            { label: 'T (mm)', w: 55 },
+            { label: 'Material', w: 95 },
+            { label: 'Kante', w: 40 },
+          ];
 
       let x = 48;
       const headerY = doc.y;
@@ -234,18 +277,27 @@ export function generateProductionPdf(
       doc.moveDown(0.2);
 
       doc.font('Helvetica').fontSize(9);
+      const fmtCm = (mm: number) => (mm / 10).toFixed(0);
       for (const part of item.cuttingList) {
         const rowY = doc.y;
         let cx = 48;
-        const row = [
-          part.label,
-          String(part.quantity),
-          String(part.widthMm),
-          String(part.heightMm),
-          String(part.depthMm),
-          part.material,
-          part.edgeBanding ? 'ja' : '—',
-        ];
+        const row = isCurtain
+          ? [
+              part.label,
+              String(part.quantity),
+              fmtCm(part.widthMm),
+              fmtCm(part.heightMm),
+              part.material,
+            ]
+          : [
+              part.label,
+              String(part.quantity),
+              String(part.widthMm),
+              String(part.heightMm),
+              String(part.depthMm),
+              part.material,
+              part.edgeBanding ? 'ja' : '—',
+            ];
         cols.forEach((col, i) => {
           doc.fillColor('#111827').text(row[i], cx, rowY, { width: col.w });
           cx += col.w;
@@ -260,12 +312,12 @@ export function generateProductionPdf(
 
       doc.moveDown(0.5);
 
-      // Hardware
+      // Hardware / accessories
       doc
         .fillColor('#111827')
         .font('Helvetica-Bold')
         .fontSize(12)
-        .text('Beschläge & Verbinder', 48, doc.y);
+        .text(isCurtain ? 'Verbrauch & Zubehör' : 'Beschläge & Verbinder', 48, doc.y);
       doc.moveDown(0.3);
       doc.font('Helvetica').fontSize(10);
       for (const hw of item.hardware) {
@@ -281,12 +333,17 @@ export function generateProductionPdf(
       const sumY = doc.y;
       doc.rect(48, sumY, 499, 40).fillAndStroke('#f3f4f6', '#e5e7eb');
       doc.fillColor('#111827').font('Helvetica-Bold').fontSize(10);
-      doc.text(`Plattenfläche gesamt: ${item.totalSheetAreaM2} m²`, 60, sumY + 8, { lineBreak: false });
-      doc.text(`Geschätztes Gewicht: ${item.estimatedWeightKg} kg`, 60, sumY + 24, { lineBreak: false });
+      if (isCurtain) {
+        doc.text(`Stoffbedarf gesamt: ${item.totalSheetAreaM2} m`, 60, sumY + 8, { lineBreak: false });
+        doc.text(`Stoffgewicht ca.: ${item.estimatedWeightKg} kg`, 60, sumY + 24, { lineBreak: false });
+      } else {
+        doc.text(`Plattenfläche gesamt: ${item.totalSheetAreaM2} m²`, 60, sumY + 8, { lineBreak: false });
+        doc.text(`Geschätztes Gewicht: ${item.estimatedWeightKg} kg`, 60, sumY + 24, { lineBreak: false });
+      }
       doc.y = sumY + 50;
     });
 
-    // Footer on each page (within bottom margin to avoid auto-pagination)
+    // Footer on each page (above bottom margin to avoid auto-pagination)
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
@@ -296,7 +353,7 @@ export function generateProductionPdf(
         .text(
           `Produktionsauftrag · ${order.documentId} · Seite ${i - range.start + 1} / ${range.count}`,
           48,
-          doc.page.height - 30,
+          doc.page.height - 22,
           { width: 499, align: 'center', lineBreak: false }
         );
     }

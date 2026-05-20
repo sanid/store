@@ -1,0 +1,97 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code post-task",
+            "type": "command"
+          }
+        ],
+        "matcher": "Task"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code post-tool-use",
+            "type": "command"
+          }
+        ],
+        "matcher": "^(?!Task$|TodoWrite$).+"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code post-todo",
+            "type": "command"
+          }
+        ],
+        "matcher": "TodoWrite"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code pre-task",
+            "type": "command"
+          }
+        ],
+        "matcher": "Task"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code pre-tool-use",
+            "type": "command"
+          }
+        ],
+        "matcher": "^(?!Task$|TodoWrite$).+"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code session-end",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code session-start",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear|compact"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code stop",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "bitloops hooks claude-code user-prompt-submit",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  }
+}

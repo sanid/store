@@ -2,7 +2,7 @@
 
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls, ContactShadows, useTexture, Environment } from "@react-three/drei";
-import { useMemo, useEffect, memo, useRef, useState } from "react";
+import { useMemo, useEffect, memo, useRef, useState, Suspense } from "react";
 import * as THREE from "three";
 import type { CurtainConfig, CurtainHeader, FabricReserve, FabricSwatch } from "@/lib/curtains";
 import { RESERVE_FACTOR } from "@/lib/curtains";
@@ -11,6 +11,7 @@ interface Props {
   config: CurtainConfig;
   fabric: FabricSwatch | undefined;
   onReady?: (gl: THREE.WebGLRenderer) => void;
+  compact?: boolean;
 }
 
 const WIN_BOTTOM_Y = 0.75;
@@ -397,7 +398,7 @@ const CurtainPanel = memo(function CurtainPanel({
     meshRef.current.geometry.computeVertexNormals();
   });
 
-  const photoTexRaw = useTexture("/pattern.jpg");
+  const photoTexRaw = useTexture(fabric.textureUrl ?? "/pattern.jpg");
   const photoTex = useMemo(() => {
     const t = photoTexRaw.clone();
     t.wrapS = THREE.RepeatWrapping;
@@ -431,7 +432,7 @@ const CurtainPanel = memo(function CurtainPanel({
         map={tex}
         normalMap={normalMap}
         normalScale={new THREE.Vector2(0.6, 0.6)}
-        color={isPhoto ? fabric.hex : "#ffffff"}
+        color={isPhoto && !fabric.textureUrl ? fabric.hex : "#ffffff"}
         roughness={roughness}
         side={THREE.DoubleSide}
         transparent={transparent}
@@ -457,45 +458,91 @@ const Rail = memo(function Rail({ widthM, header }: { widthM: number; header: Cu
 
   return (
     <group position={[0, RAIL_Y, 0]}>
-      <mesh castShadow>
-        <boxGeometry args={[totalW, 0.04, 0.04]} />
-        <meshStandardMaterial color="#1a1a1a" metalness={0.4} roughness={0.5} />
-      </mesh>
-      <mesh position={[-widthM / 2 - 0.2, 0, 0]}>
-        <sphereGeometry args={[0.035, 16, 12]} />
-        <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.4} />
-      </mesh>
-      <mesh position={[widthM / 2 + 0.2, 0, 0]}>
-        <sphereGeometry args={[0.035, 16, 12]} />
-        <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.4} />
-      </mesh>
+      {isPencil || isSinglePinch ? (
+        <>
+          {/* Flat ceiling-mounted track */}
+          <mesh castShadow>
+            <boxGeometry args={[totalW, 0.05, 0.07]} />
+            <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.45} />
+          </mesh>
+          {/* Track ceiling-side notch for depth */}
+          <mesh position={[0, 0.026, 0]}>
+            <boxGeometry args={[totalW, 0.002, 0.05]} />
+            <meshStandardMaterial color="#0a0a0a" metalness={0.4} roughness={0.6} />
+          </mesh>
+          {/* Flat rectangular end-caps */}
+          <mesh position={[-totalW / 2 - 0.005, 0, 0]}>
+            <boxGeometry args={[0.01, 0.05, 0.07]} />
+            <meshStandardMaterial color="#0d0d0d" metalness={0.5} roughness={0.5} />
+          </mesh>
+          <mesh position={[totalW / 2 + 0.005, 0, 0]}>
+            <boxGeometry args={[0.01, 0.05, 0.07]} />
+            <meshStandardMaterial color="#0d0d0d" metalness={0.5} roughness={0.5} />
+          </mesh>
+        </>
+      ) : (
+        <>
+          <mesh castShadow>
+            <boxGeometry args={[totalW, 0.04, 0.04]} />
+            <meshStandardMaterial color="#1a1a1a" metalness={0.4} roughness={0.5} />
+          </mesh>
+          <mesh position={[-widthM / 2 - 0.2, 0, 0]}>
+            <sphereGeometry args={[0.035, 16, 12]} />
+            <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.4} />
+          </mesh>
+          <mesh position={[widthM / 2 + 0.2, 0, 0]}>
+            <sphereGeometry args={[0.035, 16, 12]} />
+            <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.4} />
+          </mesh>
+        </>
+      )}
       {Array.from({ length: attachCount }).map((_, i) => {
         const rx = -totalW / 2 + i * attachSpacing;
         if (isEyelet) {
-          // brushed-steel grommet wrapping the rail
+          // brushed-steel grommet wrapping the rail — ring encircles the bar
           return (
-            <mesh key={i} position={[rx, 0, 0.02]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-              <torusGeometry args={[0.035, 0.012, 12, 24]} />
-              <meshStandardMaterial color="#c8c8cc" metalness={0.9} roughness={0.25} />
-            </mesh>
+            <group key={i} position={[rx, 0, 0]}>
+              <mesh rotation={[0, Math.PI / 2, 0]} castShadow>
+                <torusGeometry args={[0.045, 0.008, 16, 28]} />
+                <meshStandardMaterial color="#c8c8cc" metalness={0.95} roughness={0.2} />
+              </mesh>
+              {/* inner darker ring for grommet depth */}
+              <mesh rotation={[0, Math.PI / 2, 0]}>
+                <torusGeometry args={[0.038, 0.003, 8, 24]} />
+                <meshStandardMaterial color="#5a5a5e" metalness={0.6} roughness={0.5} />
+              </mesh>
+            </group>
           );
         }
         if (isPencil) {
-          // tiny hook just under the rail
+          // small square glider block hanging from the track
           return (
-            <mesh key={i} position={[rx, -0.025, 0.015]}>
-              <cylinderGeometry args={[0.0035, 0.0035, 0.03, 6]} />
-              <meshStandardMaterial color="#777" metalness={0.7} roughness={0.4} />
-            </mesh>
+            <group key={i} position={[rx, -0.05, 0]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.022, 0.045, 0.05]} />
+                <meshStandardMaterial color="#141414" metalness={0.5} roughness={0.45} />
+              </mesh>
+              {/* tiny hook loop under the glider */}
+              <mesh position={[0, -0.028, 0]}>
+                <torusGeometry args={[0.006, 0.0015, 6, 12]} />
+                <meshStandardMaterial color="#3a3a3a" metalness={0.7} roughness={0.4} />
+              </mesh>
+            </group>
           );
         }
         if (isSinglePinch) {
-          // single small pinched-pleat hook
+          // square glider block hanging from the track (like pencil)
           return (
-            <mesh key={i} position={[rx, -0.04, 0.02]} rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.014, 0.004, 6, 14]} />
-              <meshStandardMaterial color="#2a2a2a" metalness={0.6} roughness={0.35} />
-            </mesh>
+            <group key={i} position={[rx, -0.05, 0]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.024, 0.045, 0.05]} />
+                <meshStandardMaterial color="#141414" metalness={0.5} roughness={0.45} />
+              </mesh>
+              <mesh position={[0, -0.028, 0]}>
+                <torusGeometry args={[0.007, 0.0015, 6, 12]} />
+                <meshStandardMaterial color="#3a3a3a" metalness={0.7} roughness={0.4} />
+              </mesh>
+            </group>
           );
         }
         return (
@@ -582,20 +629,22 @@ const Room = memo(function Room({ widthM }: { widthM: number }) {
       <EuropeanWindow widthM={WIN_W} heightM={WIN_H} y={WIN_BOTTOM_Y + WIN_H / 2} />
 
       {/* Framed artwork — portrait left, landscape right */}
-      <FramedArt
-        x={-(WIN_W / 2 + 1.0)}
-        y={WIN_BOTTOM_Y + WIN_H / 2}
-        w={0.55}
-        h={0.78}
-        src="/artwork_portrait.png"
-      />
-      <FramedArt
-        x={WIN_W / 2 + 1.1}
-        y={WIN_BOTTOM_Y + WIN_H / 2 + 0.05}
-        w={0.95}
-        h={0.62}
-        src="/artwork_landscape.png"
-      />
+      <Suspense fallback={null}>
+        <FramedArt
+          x={-(WIN_W / 2 + 1.0)}
+          y={WIN_BOTTOM_Y + WIN_H / 2}
+          w={0.55}
+          h={0.78}
+          src="/artwork_portrait.png"
+        />
+        <FramedArt
+          x={WIN_W / 2 + 1.1}
+          y={WIN_BOTTOM_Y + WIN_H / 2 + 0.05}
+          w={0.95}
+          h={0.62}
+          src="/artwork_landscape.png"
+        />
+      </Suspense>
 
       {/* Floor — large warm oak plane */}
       <mesh position={[0, 0, floorDepth / 2 - 0.2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -758,18 +807,15 @@ const EuropeanWindow = memo(function EuropeanWindow({
       </mesh>
 
       {/* === Sashes & glass === */}
-      {/* Glass — physical material, very subtle reflectivity */}
+      {/* Glass — subtle tint, mobile-safe (no transmission shader) */}
       <mesh position={[0, 0, -0.01]}>
         <planeGeometry args={[widthM - frameT * 2 - 0.01, heightM - frameT * 2 - 0.01]} />
-        <meshPhysicalMaterial
+        <meshStandardMaterial
           transparent
-          opacity={0.12}
+          opacity={0.18}
           color="#e8eef2"
-          roughness={0.05}
+          roughness={0.1}
           metalness={0}
-          transmission={0.5}
-          ior={1.45}
-          thickness={0.01}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -1029,8 +1075,38 @@ function Capture({ onReady }: { onReady?: (gl: THREE.WebGLRenderer) => void }) {
   return null;
 }
 
-export default function CurtainScene({ config, fabric, onReady }: Props) {
+function CameraRig({ position, target }: { position: [number, number, number]; target: [number, number, number] }) {
+  const { camera } = useThree();
+  const targetPos = useRef(new THREE.Vector3(...position));
+  const targetLook = useRef(new THREE.Vector3(...target));
+  const lookProxy = useRef(new THREE.Vector3(...target));
+  const initRef = useRef(false);
+
+  useEffect(() => {
+    targetPos.current.set(position[0], position[1], position[2]);
+    targetLook.current.set(target[0], target[1], target[2]);
+    if (!initRef.current) {
+      camera.position.copy(targetPos.current);
+      lookProxy.current.copy(targetLook.current);
+      camera.lookAt(lookProxy.current);
+      camera.updateProjectionMatrix();
+      initRef.current = true;
+    }
+  }, [camera, position, target]);
+
+  useFrame((_, dt) => {
+    const k = 1 - Math.pow(0.001, dt); // frame-rate independent ease
+    camera.position.lerp(targetPos.current, k);
+    lookProxy.current.lerp(targetLook.current, k);
+    camera.lookAt(lookProxy.current);
+  });
+
+  return null;
+}
+
+export default function CurtainScene({ config, fabric, onReady, compact = false }: Props) {
   const [controlsLocked, setControlsLocked] = useState(true);
+  const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 768px)").matches;
   useEffect(() => {
     let buffer = "";
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -1066,9 +1142,9 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
   return (
     <Canvas
       camera={{ position: [-1.921, 1.877, 3.481], fov: 45 }}
-      shadows
+      shadows={!isMobile}
       frameloop="always"
-      dpr={[1, 1.5]}
+      dpr={isMobile ? [1, 2] : [1, 1.5]}
       gl={{ preserveDrawingBuffer: true, antialias: true, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1077,8 +1153,20 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
       }}
     >
       <Capture onReady={onReady} />
+      {compact ? (
+        <CameraRig
+          position={[0, RAIL_Y - 0.05, 0.55]}
+          target={[0, RAIL_Y - 0.12, 0]}
+        />
+      ) : (
+        <CameraRig position={[-1.921, 1.877, 3.481]} target={[0, WIN_BOTTOM_Y + WIN_H / 2, 0]} />
+      )}
       <color attach="background" args={["#f3efe7"]} />
-      <Environment files="/room.hdr" background={false} environmentIntensity={0.55} />
+      {!isMobile && (
+        <Suspense fallback={null}>
+          <Environment files="/room.hdr" background={false} environmentIntensity={0.55} />
+        </Suspense>
+      )}
       <ambientLight intensity={0.08} />
       <directionalLight
         position={[2, 4, 3]}
@@ -1105,12 +1193,14 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
       <Room widthM={railWidthM} />
       <Rail widthM={railWidthM} header={config.header} />
 
-      {(config.side === "left" || config.side === "both") && (
-        <CurtainPanel side="left" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={leftXOffset} />
-      )}
-      {(config.side === "right" || config.side === "both") && (
-        <CurtainPanel side="right" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={rightXOffset} />
-      )}
+      <Suspense fallback={null}>
+        {(config.side === "left" || config.side === "both") && (
+          <CurtainPanel side="left" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={leftXOffset} />
+        )}
+        {(config.side === "right" || config.side === "both") && (
+          <CurtainPanel side="right" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={rightXOffset} />
+        )}
+      </Suspense>
 
       <ContactShadows
         position={[0, 0.001, 0.2]}
@@ -1131,6 +1221,14 @@ export default function CurtainScene({ config, fabric, onReady }: Props) {
         minPolarAngle={Math.PI / 3.2}
         maxPolarAngle={Math.PI / 2.05}
         target={[0, WIN_BOTTOM_Y + WIN_H / 2, 0]}
+        onChange={(e) => {
+          const cam = e?.target.object;
+          if (!cam) return;
+          // eslint-disable-next-line no-console
+          console.log(
+            `camera pos: [${cam.position.x.toFixed(3)}, ${cam.position.y.toFixed(3)}, ${cam.position.z.toFixed(3)}]  fov: ${cam.fov}`
+          );
+        }}
       />
     </Canvas>
   );

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git checkout *)",
+      "Bash(git rm *)",
+      "Bash(git commit *)",
+      "Bash(mkdir -p frontend/src/app/\\\\[locale\\\\]/curtain-configurator)",
+      "Bash(npx next *)",
+      "Bash(npx eslint *)",
+      "Bash(ls /Users/sanid/package-lock.json /Users/sanid/package.json 2>&1 && grep -r \"createProxy\\\\|proxy\" frontend/node_modules/next-intl/package.json 2>&1 | head -5)",
+      "Bash(git mv *)",
+      "Bash(git -C /Users/sanid/Documents/store add -A)",
+      "Bash(git -C /Users/sanid/Documents/store commit -m ' *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(lsof -ti:3000)",
+      "Bash(scutil --get LocalHostName)",
+      "Bash(scutil --get ComputerName)",
+      "Bash(ipconfig getifaddr *)",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies['@strapi/strapi']\\)\")"
+    ]
+  }
+}

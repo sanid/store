@@ -1,9 +1,11 @@
 import { factories } from '@strapi/strapi';
 import { randomUUID } from 'crypto';
 import Stripe from 'stripe';
-import { sendShippingConfirmationEmail } from '../services/email';
+import { sendShippingConfirmationEmail, sendOrderConfirmationEmail } from '../services/email';
 import { buildProductionDataForOrder } from '../services/production';
 import { generateProductionPdf } from '../services/production-pdf';
+import { generateInvoicePdf } from '../services/invoice-pdf';
+import { priceCurtain } from '../services/curtain-pricing';
 
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 const stripe = stripeKey ? new Stripe(stripeKey) : null;
@@ -67,6 +69,10 @@ function calculatePriceAdjustment(
 
   if (schema?.preset === 'furniture') {
     return pricePieces(customization);
+  }
+
+  if (schema?.preset === 'curtain') {
+    return priceCurtain(customization);
   }
 
   if (!schema?.fields) return 0;
@@ -193,7 +199,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           item.customization
         );
         const schema = product.customizationSchema as { preset?: string; pricingBase?: number } | null;
-        const isFullPrice = schema?.preset === 'furniture' || (typeof schema?.pricingBase === 'number' && schema.pricingBase > 0);
+        const isFullPrice = schema?.preset === 'furniture' || schema?.preset === 'curtain' || (typeof schema?.pricingBase === 'number' && schema.pricingBase > 0);
         const unitAmount = isFullPrice ? serverAdjustment : product.price + serverAdjustment;
         const lineTotal = unitAmount * qty;
         subtotal += lineTotal;
@@ -361,6 +367,276 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
     }
   },
 
+  async refund(ctx: any) {
+    const { documentId } = ctx.params;
+    const reason = ctx.request.body?.reason as string | undefined;
+
+    if (!stripe) return ctx.internalServerError('Stripe is not configured');
+
+    const order = await strapi.documents('api::order.order').findOne({ documentId });
+    if (!order) return ctx.notFound('Order not found');
+    if (!order.stripeSessionId) {
+      return ctx.badRequest('Order has no Stripe payment intent');
+    }
+    if (order.status === 'refunded') {
+      return ctx.badRequest('Order is already refunded');
+    }
+
+    try {
+      const refund = await stripe.refunds.create({
+        payment_intent: order.stripeSessionId,
+        reason: reason === 'requested_by_customer' || reason === 'duplicate' || reason === 'fraudulent' ? reason : undefined,
+      });
+
+      await strapi.documents('api::order.order').update(documentId, {
+        data: { status: 'refunded' },
+      });
+
+      return { refundId: refund.id, status: refund.status, orderId: documentId };
+    } catch (err: any) {
+      strapi.log.error('Refund failed:', err);
+      return ctx.internalServerError(err.message || 'Refund failed');
+    }
+  },
+
+  async cancel(ctx: any) {
+    const { documentId } = ctx.params;
+    const email = String(ctx.request.body?.email || '').trim().toLowerCase();
+
+    if (!email) return ctx.badRequest('email is required');
+
+    const order = await strapi.documents('api::order.order').findOne({ documentId });
+    if (!order || String(order.customerEmail || '').toLowerCase() !== email) {
+      return ctx.notFound('Order not found');
+    }
+
+    const cancelable = order.status === 'pending' || order.status === 'paid';
+    if (!cancelable) {
+      return ctx.badRequest(
+        'Bestellung kann nicht mehr storniert werden — die Produktion hat bereits begonnen.'
+      );
+    }
+
+    if (order.status === 'paid' && stripe && order.stripeSessionId) {
+      try {
+        await stripe.refunds.create({
+          payment_intent: order.stripeSessionId,
+          reason: 'requested_by_customer',
+        });
+      } catch (err: any) {
+        strapi.log.error('Customer cancel refund failed:', err);
+        return ctx.internalServerError('Erstattung fehlgeschlagen — bitte kontaktieren Sie uns.');
+      }
+    }
+
+    await strapi.documents('api::order.order').update(documentId, {
+      data: { status: 'cancelled' },
+    });
+
+    return { orderId: documentId, status: 'cancelled' };
+  },
+
+  async updateAddress(ctx: any) {
+    const { documentId } = ctx.params;
+    const body = (ctx.request.body || {}) as Record<string, string>;
+    const email = String(body.email || '').trim().toLowerCase();
+
+    if (!email) return ctx.badRequest('email is required');
+
+    const order = await strapi.documents('api::order.order').findOne({ documentId });
+    if (!order || String(order.customerEmail || '').toLowerCase() !== email) {
+      return ctx.notFound('Order not found');
+    }
+
+    const editable = order.status === 'paid' || order.status === 'processing';
+    if (!editable) {
+      return ctx.badRequest('Adresse kann in diesem Status nicht mehr geändert werden.');
+    }
+
+    const fields = ['firstName', 'lastName', 'street', 'city', 'postalCode', 'country'] as const;
+    const current = (order.shippingAddress as Record<string, string>) || {};
+    const next: Record<string, string> = { ...current };
+    for (const f of fields) {
+      if (typeof body[f] === 'string' && body[f].trim().length > 0) {
+        next[f] = body[f].trim().slice(0, 200);
+      }
+    }
+    for (const required of ['firstName', 'lastName', 'street', 'city', 'postalCode'] as const) {
+      if (!next[required]) {
+        return ctx.badRequest(`Pflichtfeld fehlt: ${required}`);
+      }
+    }
+
+    await strapi.documents('api::order.order').update(documentId, {
+      data: { shippingAddress: next },
+    });
+
+    return { orderId: documentId, shippingAddress: next };
+  },
+
+  async generateInvoice(ctx: any) {
+    const { documentId } = ctx.params;
+    const email = String(ctx.query?.email || '').trim().toLowerCase();
+    if (!email) return ctx.badRequest('email is required');
+
+    const order = await strapi.documents('api::order.order').findOne({
+      documentId,
+    });
+    if (!order || String(order.customerEmail || '').toLowerCase() !== email) {
+      return ctx.notFound('Order not found');
+    }
+    if (!order.invoiceNumber) {
+      return ctx.badRequest('Rechnung ist noch nicht verfügbar');
+    }
+
+    const items = ((order.items as any[]) || []).map((it: any) => ({
+      name: it.name,
+      quantity: it.quantity,
+      totalPrice: it.totalPrice,
+    }));
+
+    const pdf = await generateInvoicePdf({
+      documentId: order.documentId,
+      invoiceNumber: order.invoiceNumber,
+      invoicedAt: order.invoicedAt || order.createdAt,
+      createdAt: order.createdAt,
+      customerEmail: order.customerEmail,
+      customerName: order.customerName,
+      totalAmount: order.totalAmount || 0,
+      currency: order.currency || 'eur',
+      promoCode: order.promoCode,
+      discountAmount: order.discountAmount || 0,
+      shippingAddress: order.shippingAddress as Record<string, string> | null,
+      items,
+    });
+
+    ctx.set('Content-Type', 'application/pdf');
+    ctx.set('Content-Disposition', `attachment; filename="rechnung-${order.invoiceNumber}.pdf"`);
+    ctx.body = pdf;
+  },
+
+  async exportCsv(ctx: any) {
+    const from = ctx.query?.from ? new Date(String(ctx.query.from)) : null;
+    const to = ctx.query?.to ? new Date(String(ctx.query.to)) : null;
+    const status = ctx.query?.status ? String(ctx.query.status) : null;
+
+    const filters: Record<string, unknown> = {};
+    if (status) filters.status = status;
+    if (from || to) {
+      filters.createdAt = {
+        ...(from && !isNaN(from.getTime()) ? { $gte: from.toISOString() } : {}),
+        ...(to && !isNaN(to.getTime()) ? { $lte: to.toISOString() } : {}),
+      };
+    }
+
+    const orders = await strapi.documents('api::order.order').findMany({
+      filters,
+      sort: ['createdAt:desc'],
+      pagination: { pageSize: 1000 },
+    });
+
+    const escape = (v: unknown): string => {
+      if (v === null || v === undefined) return '';
+      const s = typeof v === 'string' ? v : JSON.stringify(v);
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const headers = [
+      'orderId',
+      'createdAt',
+      'status',
+      'customerEmail',
+      'customerName',
+      'totalAmount',
+      'currency',
+      'discountAmount',
+      'promoCode',
+      'itemCount',
+      'items',
+      'street',
+      'city',
+      'postalCode',
+      'country',
+      'trackingCarrier',
+      'trackingNumber',
+      'stripeSessionId',
+    ];
+
+    const lines: string[] = [headers.join(',')];
+
+    for (const o of orders) {
+      const items = (o.items as Array<{ name: string; quantity: number }>) || [];
+      const itemCount = items.reduce((s, it) => s + (Number(it.quantity) || 1), 0);
+      const itemSummary = items.map((it) => `${it.quantity}x ${it.name}`).join(' | ');
+      const a = (o.shippingAddress as Record<string, string> | null) || {};
+      lines.push(
+        [
+          o.documentId,
+          o.createdAt,
+          o.status,
+          o.customerEmail,
+          o.customerName,
+          o.totalAmount,
+          o.currency,
+          o.discountAmount,
+          o.promoCode,
+          itemCount,
+          itemSummary,
+          a.street,
+          a.city,
+          a.postalCode,
+          a.country,
+          o.trackingCarrier,
+          o.trackingNumber,
+          o.stripeSessionId,
+        ]
+          .map(escape)
+          .join(',')
+      );
+    }
+
+    const filename = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    ctx.set('Content-Type', 'text/csv; charset=utf-8');
+    ctx.set('Content-Disposition', `attachment; filename="${filename}"`);
+    ctx.body = '﻿' + lines.join('\n');
+  },
+
+  async lookup(ctx: any) {
+    const id = String(ctx.query?.id || '').trim();
+    const email = String(ctx.query?.email || '').trim().toLowerCase();
+
+    if (!id || !email) {
+      return ctx.badRequest('id and email are required');
+    }
+
+    const order = await strapi.documents('api::order.order').findOne({
+      documentId: id,
+    });
+
+    if (!order || String(order.customerEmail || '').toLowerCase() !== email) {
+      // Same response either way to avoid order-id enumeration
+      return ctx.notFound('Order not found');
+    }
+
+    return {
+      orderId: order.documentId,
+      status: order.status,
+      createdAt: order.createdAt,
+      totalAmount: order.totalAmount,
+      currency: order.currency,
+      items: ((order.items as any[]) || []).map((it: any) => ({
+        name: it.name,
+        quantity: it.quantity,
+        totalPrice: it.totalPrice,
+      })),
+      shippingAddress: order.shippingAddress,
+      trackingNumber: order.trackingNumber || null,
+      trackingCarrier: order.trackingCarrier || null,
+      invoiceNumber: order.invoiceNumber || null,
+    };
+  },
+
   async handleStripeWebhook(ctx: any) {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -396,6 +672,10 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
         if (orders.length > 0) {
           const order = orders[0];
           const shippingData = pi.shipping || {};
+          const now = new Date();
+          const invoiceNumber =
+            (order as any).invoiceNumber ||
+            `RE-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${order.documentId.slice(0, 6).toUpperCase()}`;
           await strapi.documents('api::order.order').update(order.documentId, {
             data: {
               status: 'paid',
@@ -404,6 +684,8 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
                 name: shippingData.name,
                 address: shippingData.address,
               },
+              invoiceNumber,
+              invoicedAt: now.toISOString(),
             },
           });
 
@@ -422,6 +704,25 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
               }
             } catch (e: any) {
               strapi.log.warn(`Failed to decrement inventory for product ${item.productId}: ${e.message}`);
+            }
+          }
+
+          if (order.customerEmail) {
+            try {
+              await sendOrderConfirmationEmail(order.customerEmail, {
+                orderId: order.documentId,
+                customerName: shippingData.name || order.customerName || '',
+                totalAmount: order.totalAmount || 0,
+                currency: order.currency || 'eur',
+                items: ((order.items as any[]) || []).map((it: any) => ({
+                  name: it.name,
+                  quantity: it.quantity,
+                  totalPrice: it.totalPrice || 0,
+                })),
+                shippingAddress: (order.shippingAddress as any) || null,
+              });
+            } catch (e: any) {
+              strapi.log.warn(`Failed to send order confirmation: ${e.message}`);
             }
           }
 
@@ -515,7 +816,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
             );
 
       if (!production.items.length) {
-        return ctx.badRequest('This order has no furniture items to produce');
+        return ctx.badRequest('This order has no producible items');
       }
 
       const pdf = await generateProductionPdf(

@@ -7,8 +7,8 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 import { formatPrice } from "@/lib/utils";
-import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/routing";
+import { useLocale, useTranslations } from "next-intl";
 
 interface CheckoutFormProps {
   orderId: string | null;
@@ -25,6 +25,7 @@ export default function CheckoutForm({
   const elements = useElements();
   const router = useRouter();
   const t = useTranslations("checkout");
+  const locale = useLocale();
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -40,7 +41,7 @@ export default function CheckoutForm({
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}${window.location.pathname.replace(/\/checkout.*/, "")}/checkout/success?order_id=${orderId}`,
+        return_url: `${window.location.origin}/${locale}/checkout/success?order_id=${orderId}`,
       },
     });
 
@@ -49,7 +50,7 @@ export default function CheckoutForm({
       setProcessing(false);
     } else {
       clearCart();
-      router.push(`./checkout/success?order_id=${orderId}`);
+      router.push({ pathname: "/checkout/success", query: { order_id: orderId ?? "" } });
     }
   };
 

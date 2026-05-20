@@ -30,6 +30,7 @@ export type FabricTransparency = "opaque" | "semi-opaque" | "translucent" | "she
 export type FabricUse = "curtain" | "blind" | "upholstery" | "multi";
 
 export interface FabricSwatch {
+  textureUrl?: string;
   id: string;
   brand: string;
   collection: string;
@@ -46,7 +47,7 @@ export interface FabricSwatch {
 
 export const FABRICS: FabricSwatch[] = [
   // --- Romo (Linara collection) ---
-  { id: "romo-linara-azure", brand: "Romo", collection: "Linara", colorName: "Azure", hex: "#7fb4b0", pricePerMeter: 6290, material: "cotton", pattern: "plain", transparency: "opaque", use: ["curtain", "upholstery"], webWidthCm: 140 },
+  { id: "romo-linara-azure", brand: "Romo", collection: "Linara", colorName: "Azure", hex: "#7fb4b0", pricePerMeter: 6290, material: "cotton", pattern: "photo", transparency: "opaque", use: ["curtain", "upholstery"], webWidthCm: 140, textureUrl: "/2494-144-linara-azure.webp", description: "Romo Linara 2494/144 — naturweicher Baumwoll-Leinen-Stoff." },
   { id: "romo-linara-blossom", brand: "Romo", collection: "Linara", colorName: "Blossom", hex: "#e9c3c9", pricePerMeter: 6290, material: "cotton", pattern: "plain", transparency: "opaque", use: ["curtain", "upholstery"], webWidthCm: 140 },
   { id: "romo-linara-clay", brand: "Romo", collection: "Linara", colorName: "Clay", hex: "#a16a52", pricePerMeter: 6290, material: "cotton", pattern: "plain", transparency: "opaque", use: ["curtain"], webWidthCm: 140 },
   { id: "romo-linara-pebble", brand: "Romo", collection: "Linara", colorName: "Pebble", hex: "#bfb39a", pricePerMeter: 6290, material: "cotton", pattern: "plain", transparency: "opaque", use: ["curtain"], webWidthCm: 140 },

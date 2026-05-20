@@ -27,6 +27,14 @@ const config: Core.Config.Middlewares = [
       textLimit: '10mb',
     },
   },
+  {
+    name: 'global::rateLimit',
+    config: {
+      windowMs: 60_000,
+      max: 10,
+      paths: '^/api/orders/(create-payment-intent|validate-promo)',
+    },
+  },
   'strapi::session',
   'strapi::favicon',
   'strapi::public',

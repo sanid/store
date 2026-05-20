@@ -166,7 +166,7 @@ function Step({
   text: string;
   bullets: string[];
   tip?: string;
-  cta?: { label: string; href: string };
+  cta?: { label: string; href: React.ComponentProps<typeof Link>["href"] };
 }) {
   return (
     <div className="grid gap-8 py-12 lg:grid-cols-[auto_1fr] lg:gap-12">

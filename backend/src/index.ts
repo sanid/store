@@ -2,6 +2,12 @@ export default {
   register() {},
 
   async bootstrap({ strapi }: { strapi: any }) {
+    await seedFurniture(strapi);
+    await seedCurtain(strapi);
+  },
+};
+
+async function seedFurniture(strapi: any) {
     const CONFIGURATOR_SLUG = 'custom-furniture-piece';
     const CONFIGURATOR_SKU = 'CONFIG-FURNITURE-PIECE';
 
@@ -105,5 +111,89 @@ export default {
     await strapi.documents('api::product.product').publish(product.documentId);
 
     strapi.log.info(`[seed] Created configurator product (documentId: ${product.documentId})`);
-  },
-};
+}
+
+async function seedCurtain(strapi: any) {
+  const SLUG = 'curtain-custom';
+  const SKU = 'CONFIG-CURTAIN';
+
+  const SCHEMA = {
+    preset: 'curtain',
+    fields: [
+      { id: 'fabricId', type: 'string', label: 'Fabric', required: true },
+      { id: 'side', type: 'select', label: 'Side', required: true, options: [
+        { value: 'left', label: 'Left' },
+        { value: 'right', label: 'Right' },
+        { value: 'both', label: 'Both' },
+      ] },
+      { id: 'width', type: 'number', label: 'Width (cm)', required: true, min: 30, max: 600, step: 1, default: 100 },
+      { id: 'height', type: 'number', label: 'Height (cm)', required: true, min: 30, max: 400, step: 1, default: 100 },
+      { id: 'header', type: 'select', label: 'Header', required: true, options: [
+        { value: 'wave', label: 'Wave' },
+        { value: 'flemish', label: 'Flemish' },
+        { value: 'triple-pinch', label: 'Triple Pinch' },
+        { value: 'eyelet', label: 'Eyelet' },
+        { value: 'single-pinch', label: 'Single Pinch' },
+        { value: 'pencil', label: 'Pencil' },
+      ] },
+      { id: 'reserve', type: 'select', label: 'Fabric Reserve', options: [
+        { value: 'none', label: 'None' },
+        { value: 'low', label: 'Low' },
+        { value: 'normal', label: 'Normal' },
+        { value: 'high', label: 'High' },
+      ] },
+      { id: 'lining', type: 'select', label: 'Lining', options: [
+        { value: 'none', label: 'None' },
+        { value: 'thermo', label: 'Thermo' },
+        { value: 'acoustic', label: 'Acoustic' },
+        { value: 'dimout', label: 'Dimout' },
+        { value: 'blackout', label: 'Blackout' },
+      ] },
+      { id: 'accessory', type: 'select', label: 'Accessory', options: [
+        { value: 'none', label: 'None' },
+        { value: 'glider-4mm', label: 'Glider 4mm' },
+        { value: 'glider-6mm', label: 'Glider 6mm' },
+      ] },
+      { id: 'name', type: 'string', label: 'Curtain Name' },
+      { id: 'remark', type: 'string', label: 'Remark' },
+    ],
+  };
+
+  const existing = await strapi.documents('api::product.product').findMany({
+    filters: { slug: SLUG },
+  });
+
+  if (existing.length > 0) {
+    const doc = existing[0];
+    const schema = doc.customizationSchema as { preset?: string } | null;
+    if (schema?.preset !== 'curtain') {
+      await strapi.documents('api::product.product').update(doc.documentId, {
+        data: { featured: false, status: 'published', customizationSchema: SCHEMA },
+      });
+      try { await strapi.documents('api::product.product').publish(doc.documentId); } catch {}
+      strapi.log.info(`[seed] Updated curtain product schema (documentId: ${doc.documentId})`);
+    } else {
+      strapi.log.info(`[seed] Curtain product up to date (documentId: ${doc.documentId})`);
+    }
+    return;
+  }
+
+  const product = await strapi.documents('api::product.product').create({
+    data: {
+      name: 'Custom Curtain',
+      slug: SLUG,
+      description: '<p>A made-to-measure curtain. Choose fabric, header, lining, and accessories.</p>',
+      shortDescription: 'Vorhang nach Maß — Stoff, Faltenband, Futter frei wählbar.',
+      price: 0,
+      sku: SKU,
+      inventory: 99999,
+      featured: false,
+      status: 'published',
+      customizationSchema: SCHEMA,
+    },
+  });
+
+  await strapi.documents('api::product.product').publish(product.documentId);
+
+  strapi.log.info(`[seed] Created curtain product (documentId: ${product.documentId})`);
+}

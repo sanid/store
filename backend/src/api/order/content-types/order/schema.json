@@ -66,6 +66,13 @@
     "productionToken": {
       "type": "string",
       "private": true
+    },
+    "invoiceNumber": {
+      "type": "string",
+      "unique": true
+    },
+    "invoicedAt": {
+      "type": "datetime"
     }
   }
 }

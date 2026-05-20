@@ -5,6 +5,7 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["imac-von-sanid.local", "192.168.0.88"],
   images: {
     remotePatterns: [
       {
