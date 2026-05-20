@@ -1,3 +1,5 @@
+import CANONICAL_PRICES from "./fabric-prices.json";
+
 export type CurtainSide = "left" | "right" | "both";
 export type CurtainHeader = "wave" | "flemish" | "triple-pinch" | "eyelet" | "single-pinch" | "pencil";
 export type FabricReserve = "none" | "low" | "normal" | "high";
@@ -132,6 +134,23 @@ export const FABRICS: FabricSwatch[] = [
   { id: "uf-decor-blush", brand: "Unique Factory", collection: "Decor", colorName: "Blush", hex: "#c28888", pricePerMeter: 8990, material: "cotton", pattern: "photo", transparency: "opaque", use: ["curtain"], webWidthCm: 140 },
   { id: "uf-decor-charcoal", brand: "Unique Factory", collection: "Decor", colorName: "Charcoal", hex: "#3e3e40", pricePerMeter: 8990, material: "cotton", pattern: "photo", transparency: "opaque", use: ["curtain"], webWidthCm: 140 },
 ];
+
+// Override pricePerMeter with the canonical synced values so display and
+// server-side pricing cannot drift. Sync script: scripts/sync-fabric-prices.mjs.
+{
+  const map = CANONICAL_PRICES as Record<string, number | string>;
+  for (const f of FABRICS) {
+    const canon = map[f.id];
+    if (typeof canon === "number" && canon !== f.pricePerMeter) {
+      if (typeof window === "undefined") {
+        console.warn(
+          `[curtains] pricePerMeter drift for ${f.id}: literal=${f.pricePerMeter} canonical=${canon}; using canonical`,
+        );
+      }
+      f.pricePerMeter = canon;
+    }
+  }
+}
 
 export function getFabric(id: string): FabricSwatch | undefined {
   return FABRICS.find((f) => f.id === id);

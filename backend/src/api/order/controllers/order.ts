@@ -27,11 +27,14 @@ function getShippingRate(country: string, subtotal: number): number {
 }
 
 function pricePieces(c: Record<string, unknown>): number {
-  const width = Number(c.width) || 200;
-  const height = Number(c.height) || 84;
-  const depth = Number(c.depth) || 40;
-  const columns = Number(c.columns) || 4;
-  const rows = Number(c.rows) || 2;
+  // Clamp to realistic furniture bounds (cm). Without this, a crafted payload could
+  // multiply to absurd cubic-cm and bill the customer millions.
+  const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+  const width = clamp(Number(c.width) || 200, 10, 400);
+  const height = clamp(Number(c.height) || 84, 10, 300);
+  const depth = clamp(Number(c.depth) || 40, 10, 120);
+  const columns = clamp(Number(c.columns) || 4, 1, 12);
+  const rows = clamp(Number(c.rows) || 2, 1, 10);
   const doors = Array.isArray(c.doors) ? (c.doors as boolean[]) : [];
   const backs = !!c.backs;
   const finish = String(c.finish || 'color');
@@ -201,13 +204,24 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
         const schema = product.customizationSchema as { preset?: string; pricingBase?: number } | null;
         const isFullPrice = schema?.preset === 'furniture' || schema?.preset === 'curtain' || (typeof schema?.pricingBase === 'number' && schema.pricingBase > 0);
         const unitAmount = isFullPrice ? serverAdjustment : product.price + serverAdjustment;
+        if (!Number.isFinite(unitAmount) || unitAmount <= 0) {
+          strapi.log.warn(
+            `Rejecting cart item with non-positive unitAmount=${unitAmount} for product ${item.productId} (preset=${schema?.preset}, fabricId=${(item.customization as any)?.fabricId ?? 'n/a'})`,
+          );
+          return ctx.badRequest('One or more items in your cart could not be priced. Please review your selections.');
+        }
         const lineTotal = unitAmount * qty;
         subtotal += lineTotal;
 
+        // Only accept raster previews. SVG would let an attacker stash <script> for any
+        // downstream context that renders the data URL as HTML. 250KB cap is plenty for a
+        // small product preview thumbnail.
         const previewImage =
           typeof item.previewImage === 'string' &&
-          item.previewImage.startsWith('data:image/') &&
-          item.previewImage.length < 1_500_000
+          (item.previewImage.startsWith('data:image/png;base64,') ||
+            item.previewImage.startsWith('data:image/jpeg;base64,') ||
+            item.previewImage.startsWith('data:image/webp;base64,')) &&
+          item.previewImage.length < 250_000
             ? item.previewImage
             : undefined;
 
@@ -229,8 +243,6 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           customization: l.customization,
         }))
       );
-
-      const shippingCost = getShippingRate(shippingCountry.toUpperCase(), subtotal);
 
       let discountAmount = 0;
       let appliedPromoCode: string | null = null;
@@ -256,6 +268,11 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           }
         }
       }
+
+      // Free-shipping threshold is evaluated on the discounted subtotal so 100% promos
+      // don't yield free items + free shipping, and near-threshold orders with a promo
+      // don't sneak under the bar.
+      const shippingCost = getShippingRate(shippingCountry.toUpperCase(), subtotal - discountAmount);
 
       const totalAmount = Math.max(0, subtotal - discountAmount + shippingCost);
 
@@ -673,37 +690,80 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           const order = orders[0];
           const shippingData = pi.shipping || {};
           const now = new Date();
-          const invoiceNumber =
-            (order as any).invoiceNumber ||
-            `RE-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${order.documentId.slice(0, 6).toUpperCase()}`;
+          let invoiceNumber = (order as any).invoiceNumber as string | undefined;
+          if (!invoiceNumber) {
+            try {
+              invoiceNumber = await strapi
+                .service('api::invoice-counter.invoice-counter')
+                .nextInvoiceNumber(now.getFullYear());
+            } catch (e: any) {
+              strapi.log.error(`Failed to mint gapless invoice number: ${e.message}`);
+              // Fail the webhook so Stripe retries — never ship without a valid invoice number.
+              return ctx.internalServerError('Invoice number minting failed');
+            }
+          }
+          // Preserve the original flat-shape shippingAddress collected at checkout (used by
+          // invoice/CSV exports). If it's missing, fall back to Stripe's structured shape.
+          const existingAddress = (order.shippingAddress as Record<string, unknown> | null) || null;
+          const hasFlatAddress =
+            !!existingAddress && (existingAddress.street || existingAddress.postalCode || existingAddress.city);
+          const updateData: Record<string, unknown> = {
+            status: 'paid',
+            customerName: order.customerName || shippingData.name || '',
+            invoiceNumber,
+            invoicedAt: now.toISOString(),
+          };
+          if (!hasFlatAddress && shippingData.address) {
+            const a = shippingData.address as unknown as Record<string, string | null | undefined>;
+            const [firstName = '', ...rest] = String(shippingData.name || '').split(' ');
+            updateData.shippingAddress = {
+              firstName,
+              lastName: rest.join(' '),
+              street: [a.line1, a.line2].filter(Boolean).join(' '),
+              city: a.city || '',
+              postalCode: a.postal_code || '',
+              country: a.country || '',
+            };
+          }
           await strapi.documents('api::order.order').update(order.documentId, {
-            data: {
-              status: 'paid',
-              customerName: shippingData.name || '',
-              shippingAddress: {
-                name: shippingData.name,
-                address: shippingData.address,
-              },
-              invoiceNumber,
-              invoicedAt: now.toISOString(),
-            },
+            data: updateData,
           });
 
           strapi.log.info(`Order ${order.documentId} marked as paid`);
 
-          for (const item of (order.items as Array<{ productId: string; quantity: number }>) || []) {
+          const items = (order.items as Array<{ productId: string; quantity: number }>) || [];
+          const qtyByProduct = new Map<string, number>();
+          for (const it of items) {
+            qtyByProduct.set(it.productId, (qtyByProduct.get(it.productId) || 0) + it.quantity);
+          }
+          if (qtyByProduct.size) {
             try {
-              const product = await strapi.documents('api::product.product').findOne({
-                documentId: item.productId,
-              });
-              if (product && product.inventory != null) {
-                const newInventory = Math.max(0, product.inventory - item.quantity);
-                await strapi.documents('api::product.product').update(item.productId, {
-                  data: { inventory: newInventory },
-                });
-              }
+              const knex = strapi.db.connection;
+              // Atomic decrement: only decrement rows that still have enough inventory.
+              // Rows with NULL inventory are treated as unlimited and skipped.
+              // If a decrement fails (insufficient stock at webhook time), the order is
+              // already paid — we log and flag for manual review rather than charge a
+              // customer for something we can't ship.
+              await Promise.all(
+                [...qtyByProduct.entries()].map(async ([productId, qty]) => {
+                  const updated = await knex('products')
+                    .where({ document_id: productId })
+                    .whereNotNull('inventory')
+                    .andWhere('inventory', '>=', qty)
+                    .decrement('inventory', qty);
+                  if (!updated) {
+                    // Either inventory is NULL (unlimited — fine) or insufficient (bad).
+                    const row = await knex('products').where({ document_id: productId }).first();
+                    if (row && row.inventory != null && row.inventory < qty) {
+                      strapi.log.error(
+                        `INVENTORY_SHORTFALL order=${order.documentId} product=${productId} need=${qty} have=${row.inventory}`,
+                      );
+                    }
+                  }
+                }),
+              );
             } catch (e: any) {
-              strapi.log.warn(`Failed to decrement inventory for product ${item.productId}: ${e.message}`);
+              strapi.log.warn(`Failed to decrement inventory batch: ${e.message}`);
             }
           }
 
@@ -727,13 +787,21 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           }
 
           if (order.promoCode) {
-            const promoCodes = await strapi.documents('api::promo-code.promo-code').findMany({
-              filters: { code: order.promoCode },
-            });
-            if (promoCodes.length > 0) {
-              await strapi.documents('api::promo-code.promo-code').update(promoCodes[0].documentId, {
-                data: { usedCount: (promoCodes[0].usedCount || 0) + 1 },
-              });
+            // Atomic increment: only succeed if we're still under maxUses. Prevents two
+            // concurrent webhook handlers from both crossing the limit.
+            try {
+              const knex = strapi.db.connection;
+              const updated = await knex('promo_codes')
+                .where({ code: order.promoCode })
+                .andWhere((qb: any) =>
+                  qb.whereNull('max_uses').orWhereRaw('used_count < max_uses'),
+                )
+                .increment('used_count', 1);
+              if (!updated) {
+                strapi.log.warn(`Promo ${order.promoCode}: not incremented (maxUses reached or missing)`);
+              }
+            } catch (e: any) {
+              strapi.log.warn(`Failed to increment promo usedCount: ${e.message}`);
             }
           }
         }
@@ -836,9 +904,22 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
       ctx.set('Content-Type', 'application/pdf');
       ctx.set(
         'Content-Disposition',
-        `attachment; filename="production-${documentId.slice(-12)}.pdf"`
+        `attachment; filename="production-${documentId.slice(-12)}.pdf"`,
       );
+      // Token rides in the URL — prevent it leaking via Referer to anything downstream.
+      ctx.set('Referrer-Policy', 'no-referrer');
+      ctx.set('Cache-Control', 'no-store, private');
       ctx.body = pdf;
+
+      // Rotate the token after a successful download so the link is single-use. If the
+      // operator needs to re-download, they re-issue from the admin order detail page.
+      try {
+        await strapi.documents('api::order.order').update(documentId, {
+          data: { productionToken: randomUUID() },
+        });
+      } catch (e: any) {
+        strapi.log.warn(`Failed to rotate productionToken for ${documentId}: ${e.message}`);
+      }
     } catch (err: any) {
       strapi.log.error('Production PDF generation failed:', err);
       ctx.internalServerError('Failed to generate production PDF');

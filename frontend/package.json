@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "sync:fabric-prices": "node scripts/sync-fabric-prices.mjs",
+    "predev": "node scripts/sync-fabric-prices.mjs",
+    "prebuild": "node scripts/sync-fabric-prices.mjs",
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",

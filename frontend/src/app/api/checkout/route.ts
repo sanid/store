@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
 
     const data = await res.json();
     return NextResponse.json(data);
-  } catch {
+  } catch (err) {
+    console.error("[api/checkout] payment service unreachable:", err);
     return NextResponse.json(
       { error: "Failed to connect to payment service" },
       { status: 500 }

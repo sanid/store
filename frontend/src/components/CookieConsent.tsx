@@ -22,12 +22,23 @@ export default function CookieConsent() {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) {
         setOpen(true);
-        return;
+      } else {
+        const parsed = JSON.parse(raw) as Consent;
+        setAnalytics(!!parsed.analytics);
       }
-      JSON.parse(raw) as Consent;
     } catch {
       setOpen(true);
     }
+    const reopen = () => {
+      try {
+        const raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) setAnalytics(!!(JSON.parse(raw) as Consent).analytics);
+      } catch {}
+      setShowDetails(true);
+      setOpen(true);
+    };
+    window.addEventListener("uf:open-consent", reopen);
+    return () => window.removeEventListener("uf:open-consent", reopen);
   }, []);
 
   function save(consent: Consent) {

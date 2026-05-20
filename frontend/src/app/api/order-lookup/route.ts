@@ -9,6 +9,9 @@ export async function GET(request: NextRequest) {
   if (!id || !email) {
     return NextResponse.json({ error: "id and email are required" }, { status: 400 });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    return NextResponse.json({ error: "invalid email format" }, { status: 400 });
+  }
 
   try {
     const res = await fetch(
@@ -23,7 +26,8 @@ export async function GET(request: NextRequest) {
       );
     }
     return NextResponse.json(data);
-  } catch {
+  } catch (err) {
+    console.error("[api/order-lookup] strapi unreachable:", err);
     return NextResponse.json({ error: "Lookup-Service nicht erreichbar" }, { status: 500 });
   }
 }

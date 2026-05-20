@@ -1,16 +1,24 @@
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
-export default (config: { windowMs?: number; max?: number; paths?: string } = {}) => {
-  const windowMs = config.windowMs || 60 * 1000;
-  const max = config.max || 10;
-  const pathRegex = config.paths ? new RegExp(config.paths) : null;
+let cleanupTimer: NodeJS.Timeout | null = null;
 
-  setInterval(() => {
+function ensureCleanup(windowMs: number) {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of rateLimitMap) {
       if (now > entry.resetAt) rateLimitMap.delete(key);
     }
   }, windowMs);
+  cleanupTimer.unref?.();
+}
+
+export default (config: { windowMs?: number; max?: number; paths?: string } = {}) => {
+  const windowMs = config.windowMs || 60 * 1000;
+  const max = config.max || 10;
+  const pathRegex = config.paths ? new RegExp(config.paths) : null;
+
+  ensureCleanup(windowMs);
 
   return async (ctx: any, next: any) => {
     if (pathRegex && !pathRegex.test(ctx.request.path)) {

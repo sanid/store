@@ -20,7 +20,19 @@
       "Bash(scutil --get LocalHostName)",
       "Bash(scutil --get ComputerName)",
       "Bash(ipconfig getifaddr *)",
-      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies['@strapi/strapi']\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies['@strapi/strapi']\\)\")",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(node --experimental-strip-types --no-warnings /tmp/test-prod-pdf.mjs)",
+      "Bash(sips -s format jpeg /tmp/test-prod.pdf --out /tmp/test-prod-p1.jpg)",
+      "Bash(sips -s format jpeg --pickFromGroupURLs /tmp/test-prod.pdf --out /tmp/test-prod-pages.jpg)",
+      "Bash(pdftoppm -jpeg -r 100 test-prod.pdf test-prod-page)",
+      "Bash(sips --resampleHeightWidth 1200 850 -s format jpeg /tmp/test-prod.pdf --out /tmp/test-prod-all.jpg)",
+      "Bash(node -e ' *)",
+      "Bash(brew list *)",
+      "Bash(brew install *)",
+      "Bash(pdftoppm -jpeg -r 100 /tmp/test-prod.pdf /tmp/p)",
+      "Bash(node --experimental-strip-types --no-warnings /tmp/test-prod-pdf.mjs 2>&1 | tail -6 && rm /tmp/p-*.jpg && pdftoppm -jpeg -r 100 /tmp/test-prod.pdf /tmp/p && ls /tmp/p-*.jpg)",
+      "Bash(rm /tmp/test-prod-pdf.mjs /tmp/test-prod.pdf /tmp/test-prod-p1.jpg /tmp/test-prod-all.jpg /tmp/auto-test.pdf /tmp/p-*.jpg /tmp/split.sh 2>/dev/null; npx tsc --noEmit 2>&1; echo \"EXIT $?\")"
     ]
   }
 }

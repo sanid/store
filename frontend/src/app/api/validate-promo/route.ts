@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const STRAPI_URL = process.env.STRAPI_URL || process.env.NEXT_PUBLIC_STRAPI_URL || "http://localhost:1337";
+const TIMEOUT_MS = 10_000;
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,11 +11,22 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  } catch {
+    const data = await res.json().catch(() => null);
+
+    if (res.status >= 500) {
+      console.error("[api/validate-promo] upstream 5xx:", res.status, data);
+      return NextResponse.json(
+        { valid: false, error: "Promo-Validierung vorübergehend nicht verfügbar" },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json(data ?? { valid: false }, { status: res.status });
+  } catch (err) {
+    console.error("[api/validate-promo] strapi unreachable:", err);
     return NextResponse.json(
       { valid: false, error: "Failed to validate promo code" },
       { status: 500 }

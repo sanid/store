@@ -9,6 +9,9 @@ export async function PUT(request: NextRequest) {
   if (!id || !email) {
     return NextResponse.json({ error: "id and email are required" }, { status: 400 });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    return NextResponse.json({ error: "invalid email format" }, { status: 400 });
+  }
 
   try {
     const res = await fetch(`${STRAPI_URL}/api/orders/${encodeURIComponent(id)}/address`, {
@@ -25,7 +28,8 @@ export async function PUT(request: NextRequest) {
       );
     }
     return NextResponse.json(data);
-  } catch {
+  } catch (err) {
+    console.error("[api/update-address] strapi unreachable:", err);
     return NextResponse.json({ error: "Service nicht erreichbar" }, { status: 500 });
   }
 }

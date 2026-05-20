@@ -1,4 +1,4 @@
-// Mirrors frontend/src/lib/curtains.ts pricing. Keep in sync.
+// Canonical fabric prices live in fabric-prices.json; synced into frontend at build.
 
 type CurtainSide = 'left' | 'right' | 'both';
 type CurtainHeader = 'wave' | 'flemish' | 'triple-pinch' | 'eyelet' | 'single-pinch' | 'pencil';
@@ -36,40 +36,13 @@ const RESERVE_FACTOR: Record<FabricReserve, number> = {
   high: 2.4,
 };
 
-export const FABRIC_PRICES: Record<string, number> = {
-  // Romo Linara
-  'romo-linara-azure': 6290, 'romo-linara-blossom': 6290, 'romo-linara-clay': 6290,
-  'romo-linara-pebble': 6290, 'romo-linara-sage': 6290, 'romo-linara-charcoal': 6290,
-  'romo-linara-ivory': 6290,
-  // Zimmer Rohde Colibri
-  'zr-colibri-saffron': 12912, 'zr-colibri-emerald': 12912, 'zr-colibri-night': 12912,
-  'zr-colibri-rose': 12912, 'zr-colibri-silver': 12912,
-  // Zimmer Rohde Sinfonia
-  'zr-sinfonia-honey': 11200, 'zr-sinfonia-plum': 11200, 'zr-sinfonia-oat': 11200,
-  // Kirkby Sahara
-  'kd-sahara-golden-ochre': 4633, 'kd-sahara-dove': 4633, 'kd-sahara-teal': 4633,
-  'kd-sahara-blush': 4633, 'kd-sahara-charcoal': 4633, 'kd-sahara-sage': 4633,
-  // Villa Nova Geneva
-  'vn-geneva-birch': 5270, 'vn-geneva-slate': 5270, 'vn-geneva-ivory': 5270, 'vn-geneva-moss': 5270,
-  // Villa Nova Otello
-  'vn-otello-navy': 9450, 'vn-otello-terracotta': 9450, 'vn-otello-sage': 9450,
-  // Unique Factory Velluto
-  'uf-velluto-ruby': 7900, 'uf-velluto-forest': 7900, 'uf-velluto-cream': 7900,
-  'uf-velluto-navy': 7900, 'uf-velluto-plum': 7900,
-  // Unique Factory Aria
-  'uf-aria-sheer-white': 3490, 'uf-aria-sheer-mist': 3490, 'uf-aria-sheer-linen': 3490,
-  'uf-aria-sheer-pearl': 3490,
-  // Unique Factory Linum
-  'uf-linum-natural': 5590, 'uf-linum-graphite': 5590, 'uf-linum-rust': 5590,
-  // Unique Factory Orto
-  'uf-orto-stripe-indigo': 6890, 'uf-orto-floral-sand': 6890, 'uf-orto-geo-onyx': 6890,
-  // Unique Factory Lana
-  'uf-wool-heather': 8490, 'uf-wool-charcoal': 8490,
-  // Unique Factory Seta
-  'uf-seta-champagne': 10500, 'uf-seta-bronze': 10500, 'uf-seta-dusk': 10500,
-  // Unique Factory Bouclé
-  'uf-boucle-ivory': 7200, 'uf-boucle-caramel': 7200, 'uf-boucle-anthracite': 7200,
-};
+import rawPrices from './fabric-prices.json';
+
+export const FABRIC_PRICES: Record<string, number> = Object.fromEntries(
+  Object.entries(rawPrices as Record<string, number | string>).filter(
+    ([k, v]) => !k.startsWith('_') && typeof v === 'number'
+  ) as [string, number][]
+);
 
 export function priceCurtain(c: Record<string, unknown>): number {
   const fabricId = String(c.fabricId || '');

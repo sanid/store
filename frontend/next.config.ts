@@ -29,7 +29,20 @@ const nextConfig: NextConfig = {
     qualities: [75],
     dangerouslyAllowLocalIP: process.env.NODE_ENV !== "production",
   },
-  headers: async () => [
+  headers: async () => {
+    const isDev = process.env.NODE_ENV !== "production";
+    // 'unsafe-eval' is required by Next's dev runtime / React Refresh but MUST be off in prod.
+    const scriptSrc = isDev
+      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' js.stripe.com"
+      : "script-src 'self' 'unsafe-inline' js.stripe.com";
+    const imgSrc = isDev
+      ? "img-src 'self' data: blob: http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://res.cloudinary.com"
+      : "img-src 'self' data: blob: https://*.strapiapp.com https://*.up.railway.app https://res.cloudinary.com";
+    const connectSrc = isDev
+      ? "connect-src 'self' http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com"
+      : "connect-src 'self' https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com";
+
+    return [
     {
       source: "/(.*)",
       headers: [
@@ -37,12 +50,12 @@ const nextConfig: NextConfig = {
           key: "Content-Security-Policy",
           value: [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' js.stripe.com",
+            scriptSrc,
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: blob: http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://res.cloudinary.com",
+            imgSrc,
             "font-src 'self'",
             "frame-src js.stripe.com",
-            "connect-src 'self' http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com",
+            connectSrc,
           ].join("; "),
         },
         { key: "X-Content-Type-Options", value: "nosniff" },
@@ -58,7 +71,8 @@ const nextConfig: NextConfig = {
         },
       ],
     },
-  ],
+  ];
+  },
 };
 
 export default withNextIntl(nextConfig);

@@ -298,6 +298,15 @@ const CurtainPanel = memo(function CurtainPanel({
   const windStrength = 0.0015 / weight;
   const stiffness = 0.01 * weight;
 
+  // computeVertexNormals walks every triangle and is the hottest call in this loop.
+  // Cloth moves smoothly between frames so lighting tolerates a 1-frame lag well.
+  // Coarse-pointer (touch) devices get a deeper skip to claw back budget on mobile GPUs.
+  const normalsSkip = useMemo(() => {
+    if (typeof window === "undefined") return 2;
+    return window.matchMedia?.("(pointer: coarse)").matches ? 3 : 2;
+  }, []);
+  const frameRef = useRef(0);
+
   useFrame((_, deltaRaw) => {
     if (!meshRef.current) return;
     const dt = Math.min(deltaRaw, 1 / 30); // clamp dt to avoid blowup on tab switch
@@ -395,7 +404,9 @@ const CurtainPanel = memo(function CurtainPanel({
       }
     }
     pos.needsUpdate = true;
-    meshRef.current.geometry.computeVertexNormals();
+    if (++frameRef.current % normalsSkip === 0) {
+      meshRef.current.geometry.computeVertexNormals();
+    }
   });
 
   const photoTexRaw = useTexture(fabric.textureUrl ?? "/pattern.jpg");

@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "invoice_counters",
+  "info": {
+    "singularName": "invoice-counter",
+    "pluralName": "invoice-counters",
+    "displayName": "Invoice Counter",
+    "description": "Gapless per-year invoice number sequence (§14 UStG)."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "year": {
+      "type": "integer",
+      "required": true,
+      "unique": true
+    },
+    "lastNumber": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "min": 0
+    }
+  }
+}

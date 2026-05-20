@@ -19,15 +19,24 @@ export interface FurnitureCustomization {
   doors?: boolean[];
 }
 
+// Dimensions follow workshop convention: panel = Länge × Breite × Stärke (L × B × S).
+// L is always the longer face dimension, B the shorter, S the material thickness.
+// For textiles (curtains) S is 0 and L/B are the panel orientation as cut.
 export interface CuttingListPart {
   label: string;
   quantity: number;
+  lengthMm: number;
   widthMm: number;
-  heightMm: number;
-  depthMm: number;
+  thicknessMm: number;
   material: string;
   edgeBanding?: boolean;
   notes?: string;
+}
+
+function panel(faceA: number, faceB: number, thicknessMm: number): { lengthMm: number; widthMm: number; thicknessMm: number } {
+  const lengthMm = Math.round(Math.max(faceA, faceB));
+  const widthMm = Math.round(Math.min(faceA, faceB));
+  return { lengthMm, widthMm, thicknessMm };
 }
 
 export interface ProductionItem {
@@ -76,16 +85,12 @@ export function buildProductionItem(
       : c.finish === 'veneer'
         ? 'MDF 18mm + Furnier'
         : 'MDF 18mm + Lack';
-  const colorNote = c.color ? `Farbe: ${c.color}` : '';
-
   const parts: CuttingListPart[] = [];
 
   parts.push({
     label: 'Deckplatte / Bodenplatte',
     quantity: 2,
-    widthMm: W,
-    heightMm: t,
-    depthMm: D,
+    ...panel(W, D, t),
     material: finishLabel,
     edgeBanding: true,
     notes: 'horizontal',
@@ -94,9 +99,7 @@ export function buildProductionItem(
   parts.push({
     label: 'Seitenwand (links/rechts)',
     quantity: 2,
-    widthMm: t,
-    heightMm: H - 2 * t,
-    depthMm: D,
+    ...panel(H - 2 * t, D, t),
     material: finishLabel,
     edgeBanding: true,
     notes: 'vertikal außen',
@@ -106,9 +109,7 @@ export function buildProductionItem(
     parts.push({
       label: 'Vertikale Trennwand',
       quantity: columns - 1,
-      widthMm: t,
-      heightMm: H - 2 * t,
-      depthMm: D,
+      ...panel(H - 2 * t, D, t),
       material: finishLabel,
       edgeBanding: true,
       notes: 'innen',
@@ -119,9 +120,7 @@ export function buildProductionItem(
     parts.push({
       label: 'Einlegeboden (pro Spalte)',
       quantity: (rows - 1) * columns,
-      widthMm: cellW,
-      heightMm: t,
-      depthMm: D,
+      ...panel(cellW, D, t),
       material: finishLabel,
       edgeBanding: true,
       notes: 'horizontal innen',
@@ -133,9 +132,7 @@ export function buildProductionItem(
     parts.push({
       label: 'Tür',
       quantity: doorCount,
-      widthMm: cellW - 4,
-      heightMm: cellH - 4,
-      depthMm: t,
+      ...panel(cellW - 4, cellH - 4, t),
       material: finishLabel,
       edgeBanding: true,
       notes: 'mit Push-to-Open',
@@ -146,9 +143,7 @@ export function buildProductionItem(
     parts.push({
       label: 'Rückwand (HDF 6mm)',
       quantity: rows * columns,
-      widthMm: Math.round(cellW),
-      heightMm: Math.round(cellH),
-      depthMm: 6,
+      ...panel(cellW, cellH, 6),
       material: 'HDF 6mm',
       edgeBanding: false,
       notes: 'eingenutet',
@@ -159,9 +154,7 @@ export function buildProductionItem(
     parts.push({
       label: 'Sockel',
       quantity: 1,
-      widthMm: W - 40,
-      heightMm: 60,
-      depthMm: D - 40,
+      ...panel(W - 40, D - 40, 60),
       material: 'Schwarz lackiert',
       edgeBanding: false,
       notes: 'matt schwarz',
@@ -182,12 +175,10 @@ export function buildProductionItem(
     hardware.push({ label: 'Metallfüße H=120mm', quantity: 4 });
   }
 
+  // Panel area = L × B (face dimensions). Stärke is thickness, not area.
   let totalSheetAreaM2 = 0;
   for (const p of parts) {
-    const longest = Math.max(p.widthMm, p.heightMm, p.depthMm);
-    const second =
-      p.widthMm + p.heightMm + p.depthMm - longest - Math.min(p.widthMm, p.heightMm, p.depthMm);
-    totalSheetAreaM2 += (longest * second) / 1_000_000 * p.quantity;
+    totalSheetAreaM2 += (p.lengthMm * p.widthMm) / 1_000_000 * p.quantity;
   }
   totalSheetAreaM2 = Math.round(totalSheetAreaM2 * 100) / 100;
 
@@ -269,19 +260,22 @@ export function buildCurtainProductionItem(
   const meters = Math.max(0.5, fabricWidthM * fabricHeightM);
 
   const panelWidthMm = Math.round((widthCm / sides) * reserveFactor * 10);
+  // Cut height = finished height + 30 cm hem allowance (10 top + 20 bottom)
   const panelHeightMm = Math.round((heightCm + 30) * 10);
   const fabricLabel = String(c.fabricLabel || c.fabricId || 'Stoff');
 
+  // For curtains we keep B (horizontal) and H (vertical) by orientation since the
+  // panel always hangs with one specific side up. L holds height, B holds width.
   const cuttingList: CuttingListPart[] = [
     {
       label: `Stoffbahn (${HEADER_LABEL[header] ?? header})`,
       quantity: sides,
+      lengthMm: panelHeightMm,
       widthMm: panelWidthMm,
-      heightMm: panelHeightMm,
-      depthMm: 0,
+      thicknessMm: 0,
       material: fabricLabel,
       edgeBanding: false,
-      notes: `Stoffbedarf gesamt: ${meters.toFixed(2)} m`,
+      notes: `inkl. 30 cm Saumzugabe · Stoffbedarf gesamt: ${meters.toFixed(2)} m`,
     },
   ];
 
@@ -289,12 +283,12 @@ export function buildCurtainProductionItem(
     cuttingList.push({
       label: `Futter (${LINING_LABEL[lining] ?? lining})`,
       quantity: sides,
+      lengthMm: panelHeightMm - 50,
       widthMm: panelWidthMm,
-      heightMm: panelHeightMm - 50,
-      depthMm: 0,
+      thicknessMm: 0,
       material: LINING_LABEL[lining] ?? lining,
       edgeBanding: false,
-      notes: 'separat gesäumt',
+      notes: 'separat gesäumt, 5 cm kürzer',
     });
   }
 

@@ -174,6 +174,8 @@ function CollectionCard({ items }: { items: FabricSwatch[] }) {
           <img
             src={head.textureUrl ?? "/pattern.jpg"}
             alt=""
+            loading="lazy"
+            decoding="async"
             className={
               head.textureUrl
                 ? "absolute inset-0 h-full w-full object-cover"

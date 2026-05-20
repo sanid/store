@@ -8,7 +8,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CartDrawer from "@/components/CartDrawer";
 import CookieConsent from "@/components/CookieConsent";
-import DevGate from "@/components/DevGate";
 
 export const metadata: Metadata = {
   title: {
@@ -63,15 +62,13 @@ export default async function LocaleLayout({
         Skip to content
       </a>
       <NextIntlClientProvider>
-        <DevGate>
-          <CartProvider>
-            <Navbar />
-            <CartDrawer />
-            <main id="main-content" className="flex-1">{children}</main>
-            <Footer />
-            <CookieConsent />
-          </CartProvider>
-        </DevGate>
+        <CartProvider>
+          <Navbar />
+          <CartDrawer />
+          <main id="main-content" className="flex-1">{children}</main>
+          <Footer />
+          <CookieConsent />
+        </CartProvider>
       </NextIntlClientProvider>
     </>
   );
