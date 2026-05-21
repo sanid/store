@@ -11,20 +11,20 @@ import CookieConsent from "@/components/CookieConsent";
 
 export const metadata: Metadata = {
   title: {
-    default: "CustomStore — Premium Custom Products",
-    template: "%s | CustomStore",
+    default: "Unique Factory — Maßgefertigte Vorhänge & Gardinen",
+    template: "%s | Unique Factory",
   },
   description:
-    "Premium custom products, crafted to your specifications. Design your own with our 3D customizer.",
+    "Unique Factory — Ihr Fachgeschäft für maßgefertigte Vorhänge, Gardinen und Dekoschals. Konfigurieren Sie Ihre Traumvorhänge individuell nach Wunsch.",
   openGraph: {
     type: "website",
-    siteName: "CustomStore",
+    siteName: "Unique Factory",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "CustomStore — Premium Custom Products",
+        alt: "Unique Factory — Maßgefertigte Vorhänge & Gardinen",
       },
     ],
   },
