@@ -18,7 +18,12 @@ export default function middleware(request: NextRequest) {
       pathname.startsWith("/_next") ||
       pathname.startsWith("/_vercel") ||
       /\.[a-zA-Z0-9]+$/.test(pathname);
-    if (!exempt && request.cookies.get(COOKIE_NAME)?.value !== "1") {
+
+    if (exempt) {
+      return NextResponse.next();
+    }
+
+    if (request.cookies.get(COOKIE_NAME)?.value !== "1") {
       const url = request.nextUrl.clone();
       url.pathname = "/dev-gate";
       url.search = `?next=${encodeURIComponent(pathname + request.nextUrl.search)}`;
