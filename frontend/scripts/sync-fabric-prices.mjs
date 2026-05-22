@@ -10,6 +10,10 @@ const SRC = resolve(__dirname, "../../backend/src/api/order/services/fabric-pric
 const DEST = resolve(__dirname, "../src/lib/fabric-prices.json");
 
 if (!existsSync(SRC)) {
+  if (existsSync(DEST)) {
+    console.log(`[sync-fabric-prices] backend source missing (${SRC}), using existing frontend copy`);
+    process.exit(0);
+  }
   console.error(`[sync-fabric-prices] backend source missing: ${SRC}`);
   process.exit(1);
 }
