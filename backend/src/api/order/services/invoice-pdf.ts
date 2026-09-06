@@ -232,6 +232,12 @@ export function generateInvoicePdf(order: InvoiceOrder): Promise<Buffer> {
     const range = doc.bufferedPageRange();
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
+      // Der Footer liegt unterhalb des unteren Rands. pdfkit legt fuer Text
+      // jenseits dieser Grenze automatisch eine neue Seite an — jede neue Seite
+      // braucht dann wieder einen Footer, was die Rechnung auf mehrere fast
+      // leere Seiten aufblaeht. Waehrend des Zeichnens den Rand aufheben.
+      const origBottom = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
       const fy = doc.page.height - 42;
       doc
         .strokeColor('#e5e7eb')
@@ -266,6 +272,7 @@ export function generateInvoicePdf(order: InvoiceOrder): Promise<Buffer> {
       doc.text(col1, 56, fy + 6, { width: 170 });
       doc.text(col2, 230, fy + 6, { width: 170 });
       doc.text(col3, 400, fy + 6, { width: right - 400 });
+      doc.page.margins.bottom = origBottom;
     }
 
     doc.end();

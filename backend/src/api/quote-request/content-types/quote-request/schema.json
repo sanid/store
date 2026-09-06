@@ -1,0 +1,83 @@
+{
+  "kind": "collectionType",
+  "collectionName": "quote_requests",
+  "info": {
+    "singularName": "quote-request",
+    "pluralName": "quote-requests",
+    "displayName": "Anfrage",
+    "description": "Anfragen aus dem KI-Schnellkalkulator inkl. Fotos, KI-Einschätzung und Angebotsdaten"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "quoteCode": {
+      "type": "string",
+      "unique": true,
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["new", "in_review", "offered", "accepted", "declined", "expired"],
+      "default": "new",
+      "required": true
+    },
+
+    "customerName": { "type": "string" },
+    "customerEmail": { "type": "email" },
+    "customerPhone": { "type": "string" },
+    "customerMessage": { "type": "text" },
+
+    "service": { "type": "string" },
+    "objectType": { "type": "string" },
+    "objectLabel": { "type": "string" },
+    "quantity": { "type": "integer", "min": 1, "default": 1 },
+    "dimensions": { "type": "json" },
+    "photos": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": ["images"]
+    },
+
+    "aiSource": {
+      "type": "enumeration",
+      "enum": ["ai", "heuristic"],
+      "default": "heuristic"
+    },
+    "aiProvider": { "type": "string" },
+    "aiModel": { "type": "string" },
+    "aiConfidence": { "type": "decimal" },
+    "aiAssessment": {
+      "type": "json",
+      "description": "Unveränderte KI-Einschätzung. Referenz — Änderungen gehören in die Arbeitswerte."
+    },
+
+    "workingValues": {
+      "type": "json",
+      "description": "Arbeitswerte für die Kalkulation. Vorbelegt aus der KI-Schätzung, hier korrigierbar."
+    },
+    "priceBreakdown": {
+      "type": "json",
+      "description": "Berechnetes Ergebnis. Wird bei jedem Speichern aus den Arbeitswerten neu berechnet."
+    },
+    "customerPreviewGross": {
+      "type": "integer",
+      "min": 0,
+      "description": "Was dem Kunden im Kalkulator angezeigt wurde (Brutto, Cent)."
+    },
+
+    "internalNotes": {
+      "type": "richtext",
+      "description": "Interne Notizen. Erscheinen NICHT im Angebot."
+    },
+    "offerNotes": {
+      "type": "richtext",
+      "description": "Text für das Angebots-PDF."
+    },
+
+    "offerNumber": { "type": "string", "unique": true },
+    "offeredAt": { "type": "datetime" },
+    "validUntil": { "type": "date" },
+    "offerToken": { "type": "string", "private": true }
+  }
+}

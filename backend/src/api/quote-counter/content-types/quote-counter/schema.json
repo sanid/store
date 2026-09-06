@@ -1,0 +1,17 @@
+{
+  "kind": "collectionType",
+  "collectionName": "quote_counters",
+  "info": {
+    "singularName": "quote-counter",
+    "pluralName": "quote-counters",
+    "displayName": "Quote Counter",
+    "description": "Fortlaufende Angebotsnummern pro Jahr."
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "year": { "type": "integer", "required": true, "unique": true },
+    "lastNumber": { "type": "integer", "required": true, "default": 0, "min": 0 }
+  }
+}

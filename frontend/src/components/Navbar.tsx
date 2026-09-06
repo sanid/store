@@ -42,6 +42,12 @@ export default function Navbar() {
             >
               Konfigurator
             </Link>
+            <Link
+              href="/kalkulator"
+              className="hidden text-[11px] font-medium uppercase tracking-[0.2em] text-stone-300 transition hover:text-white md:inline"
+            >
+              Kalkulator
+            </Link>
           </div>
 
           {/* Center: brand */}
@@ -103,6 +109,13 @@ export default function Navbar() {
               onClick={() => setMobileOpen(false)}
             >
               Konfigurator
+            </Link>
+            <Link
+              href="/kalkulator"
+              className="block py-2 text-[11px] font-medium uppercase tracking-[0.2em] text-stone-300"
+              onClick={() => setMobileOpen(false)}
+            >
+              Kalkulator
             </Link>
             <a
               href="#kontakt"

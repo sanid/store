@@ -4,14 +4,16 @@
   "private": true,
   "scripts": {
     "sync:fabric-prices": "node scripts/sync-fabric-prices.mjs",
-    "predev": "node scripts/sync-fabric-prices.mjs",
-    "prebuild": "node scripts/sync-fabric-prices.mjs",
+    "predev": "node scripts/sync-fabric-prices.mjs && node scripts/sync-quote-catalog.mjs",
+    "prebuild": "node scripts/sync-fabric-prices.mjs && node scripts/sync-quote-catalog.mjs",
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:quote-catalog": "node scripts/sync-quote-catalog.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@stripe/react-stripe-js": "^6.3.0",

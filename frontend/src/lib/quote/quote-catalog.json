@@ -1,0 +1,56 @@
+{
+  "_comment": "Kanonischer Katalog des KI-Schnellkalkulators. Backend ist die Quelle der Wahrheit; das Frontend synchronisiert diese Datei bei predev/prebuild (scripts/sync-quote-catalog.mjs). Alle Preise in Cent.",
+  "rates": {
+    "laborRatePerHour": 6800,
+    "setupFee": 4900,
+    "consumablesRate": 0.12,
+    "leatherSqmPerFabricMeter": 1.55,
+    "vatRate": 0.19,
+    "offerValidDays": 30
+  },
+  "difficultyFactor": [1, 0.85, 1.0, 1.2, 1.45, 1.8],
+  "difficultyLabel": ["", "Einfach", "Überschaubar", "Mittel", "Anspruchsvoll", "Sehr anspruchsvoll"],
+  "services": [
+    { "id": "reupholster",     "label": "Neu beziehen",                "hint": "Kompletter Neubezug inkl. Abpolstern",     "laborFactor": 1,    "materialFactor": 1 },
+    { "id": "repair",          "label": "Reparatur",                   "hint": "Einzelne Stelle, Naht oder Teilbereich",   "laborFactor": 0.4,  "materialFactor": 0.3 },
+    { "id": "cover",           "label": "Husse",                       "hint": "Abnehmbarer Bezug über dem Bestand",       "laborFactor": 0.75, "materialFactor": 1.15 },
+    { "id": "cushion",         "label": "Kissen & Auflagen",           "hint": "Sitzkissen, Rückenkissen, Auflagen",       "laborFactor": 0.45, "materialFactor": 0.6 },
+    { "id": "curtain-special", "label": "Vorhang-Sonderanfertigung",   "hint": "Alles jenseits des Standard-Konfigurators","laborFactor": 0.6,  "materialFactor": 1 },
+    { "id": "other",           "label": "Sonstiges",                   "hint": "Beschreiben Sie das Projekt frei",         "laborFactor": 1,    "materialFactor": 1 }
+  ],
+  "objectTypes": [
+    { "id": "chair",       "label": "Stuhl",            "fabric": { "base": 1.5, "min": 0.4, "max": 4 },  "hours": { "base": 2.5, "min": 0.5, "max": 8 },  "baseDifficulty": 2, "foamLiters": 6 },
+    { "id": "stool",       "label": "Hocker",           "fabric": { "base": 1.0, "min": 0.3, "max": 3 },  "hours": { "base": 1.5, "min": 0.4, "max": 5 },  "baseDifficulty": 1, "foamLiters": 5 },
+    { "id": "armchair",    "label": "Sessel",           "fabric": { "base": 5.0, "min": 2, "max": 12 },   "hours": { "base": 9, "min": 3, "max": 26 },    "baseDifficulty": 3, "foamLiters": 30 },
+    { "id": "bench",       "label": "Bank",             "fabric": { "base": 3.0, "min": 1, "max": 9 },    "hours": { "base": 4.5, "min": 1.5, "max": 14 },"baseDifficulty": 2, "foamLiters": 18 },
+    { "id": "sofa-2",      "label": "Sofa 2-Sitzer",    "fabric": { "base": 11, "min": 5, "max": 24 },    "hours": { "base": 18, "min": 7, "max": 45 },   "baseDifficulty": 4, "foamLiters": 60 },
+    { "id": "sofa-3",      "label": "Sofa 3-Sitzer",    "fabric": { "base": 15, "min": 7, "max": 32 },    "hours": { "base": 24, "min": 10, "max": 60 },  "baseDifficulty": 4, "foamLiters": 85 },
+    { "id": "corner-sofa", "label": "Ecksofa",          "fabric": { "base": 24, "min": 12, "max": 55 },   "hours": { "base": 38, "min": 16, "max": 90 },  "baseDifficulty": 5, "foamLiters": 140 },
+    { "id": "headboard",   "label": "Kopfteil / Bett",  "fabric": { "base": 4.5, "min": 1.5, "max": 14 }, "hours": { "base": 5, "min": 1.5, "max": 18 },  "baseDifficulty": 2, "foamLiters": 25 },
+    { "id": "cushion-set", "label": "Kissen / Auflage", "fabric": { "base": 1.6, "min": 0.3, "max": 8 },  "hours": { "base": 1.2, "min": 0.3, "max": 6 }, "baseDifficulty": 1, "foamLiters": 8 },
+    { "id": "window",      "label": "Fenster / Textil", "fabric": { "base": 6, "min": 1, "max": 30 },     "hours": { "base": 3, "min": 0.8, "max": 14 },  "baseDifficulty": 2, "foamLiters": 0 },
+    { "id": "other",       "label": "Anderes Objekt",   "fabric": { "base": 4, "min": 0.3, "max": 40 },   "hours": { "base": 6, "min": 0.5, "max": 90 },  "baseDifficulty": 3, "foamLiters": 20 }
+  ],
+  "extras": [
+    { "id": "foam-replace",    "label": "Schaumstoff erneuern",    "hint": "Neue Polsterung statt Aufarbeitung",    "hours": 1.0 },
+    { "id": "springs-webbing", "label": "Federn / Gurte erneuern", "hint": "Unterfederung instand setzen",          "hours": 2.0, "fixed": 3500 },
+    { "id": "buttons-tufting", "label": "Knöpfe / Kapitonierung",  "hint": "Handgeknöpfte Steppung",                "hours": 3.0, "fixed": 2500 },
+    { "id": "piping",          "label": "Keder / Paspel",          "hint": "Umlaufende Zierkante",                  "hours": 1.2, "fabricFactor": 1.08 },
+    { "id": "zipper",          "label": "Reißverschluss",          "hint": "Abnehmbarer Bezug",                     "hours": 0.8, "fixed": 900 },
+    { "id": "wood-refinish",   "label": "Holz aufarbeiten",        "hint": "Gestell schleifen und ölen/lackieren",  "hours": 2.5, "fixed": 2000 },
+    { "id": "pattern-match",   "label": "Musterrapport",           "hint": "Gemustertes Material exakt ausrichten", "hours": 1.0, "fabricFactor": 1.25 },
+    { "id": "pickup-delivery", "label": "Abholung & Lieferung",    "hint": "Berlin und Umland",                     "fixed": 8900, "perOrder": true }
+  ],
+  "conditions": [
+    { "id": "good",    "label": "Gut erhalten",     "laborFactor": 0.9 },
+    { "id": "worn",    "label": "Gebraucht",        "laborFactor": 1.0 },
+    { "id": "damaged", "label": "Beschädigt",       "laborFactor": 1.2 },
+    { "id": "severe",  "label": "Stark beschädigt", "laborFactor": 1.45 }
+  ],
+  "leatherGrades": [
+    { "id": "leather-corrected", "label": "Korrigiertes Rindleder", "pricePerSqm": 7900,  "hint": "Robust, gleichmäßige Optik",         "hex": "#6b4a35" },
+    { "id": "leather-semi",      "label": "Semi-Anilin",            "pricePerSqm": 12500, "hint": "Natürliche Narbung, leicht geschützt","hex": "#8a5a3c" },
+    { "id": "leather-aniline",   "label": "Anilin / Naturleder",    "pricePerSqm": 18900, "hint": "Offenporig, patiniert schön",        "hex": "#a3663d" },
+    { "id": "leather-nubuck",    "label": "Nubuk",                  "pricePerSqm": 16400, "hint": "Samtige Oberfläche, empfindlicher",  "hex": "#5c4a44" }
+  ]
+}

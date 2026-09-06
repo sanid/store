@@ -38,6 +38,10 @@ export const routing = defineRouting({
       de: "/vorhang-konfigurator",
       en: "/curtain-configurator",
     },
+    "/kalkulator": {
+      de: "/kalkulator",
+      en: "/calculator",
+    },
     "/how-to-shop": {
       de: "/so-bestellen",
       en: "/how-to-shop",
