@@ -14,31 +14,160 @@ interface Props {
   compact?: boolean;
 }
 
-const WIN_BOTTOM_Y = 0.75;
-const WIN_H = 1.95;
-const WIN_W = 1.55;
-const RAIL_Y = WIN_BOTTOM_Y + WIN_H + 0.18;
+// --- Scene proportions -------------------------------------------------
+// The room is derived from the only two numbers the customer actually enters
+// (rail width + curtain drop), so window, wall and camera always stand in a
+// believable relation to the curtain instead of a fixed stage set.
+const RAIL_OVERHANG = 0.18; // rail runs this far past the window on each side
+const HEADER_ABOVE = 0.16; // rail is mounted this far above the window head
+const HEM_CLEARANCE = 0.02; // a floor-length hem stops just short of the floor
+const MIN_WIN_H = 0.6;
+const WALL_Z = -0.22;
+
+interface SceneMetrics {
+  railWidthM: number;
+  curtainH: number;
+  winW: number;
+  winH: number;
+  sillY: number;
+  winTopY: number;
+  winCenterY: number;
+  railY: number;
+  ceilingY: number;
+  wallW: number;
+  roomDepth: number;
+}
+
+/**
+ * Where the fabric's top edge sits relative to the rod/track centre — positive
+ * is below it. An eyelet header is the odd one out: the rod passes *through*
+ * the cloth, so the top edge stands above the rod by the distance from the
+ * eyelet centre to the hem.
+ */
+const EYELET_RISE = 0.038;
+function headerDrop(header: CurtainHeader): number {
+  if (header === "eyelet") return -EYELET_RISE;
+  if (header === "pencil" || header === "single-pinch") return 0.075; // track glider + hook
+  return 0.055; // ring + hook
+}
+
+function sceneMetrics(railWidthM: number, curtainH: number, drop: number): SceneMetrics {
+  // A rod is ordered wider than the opening; the window is what's left.
+  const winW = Math.max(0.5, railWidthM - RAIL_OVERHANG * 2);
+  // Taller drops belong to taller windows, which sit on a higher sill —
+  // clamped to the range real sills live in (45–95 cm above the floor).
+  const sillY = Math.min(0.95, Math.max(0.45, curtainH * 0.28));
+  // Curtains are ordered rail-to-floor, so the rail height follows the drop —
+  // plus whatever the hooks hang below the rod, which is why an installer
+  // mounts the rod that bit higher. Very short drops get lifted so the window
+  // underneath stays plausible.
+  const railY = Math.max(curtainH + HEM_CLEARANCE + drop, sillY + MIN_WIN_H + HEADER_ABOVE);
+  const winTopY = railY - HEADER_ABOVE;
+  const winH = winTopY - sillY;
+  const ceilingY = Math.max(railY + 0.26, 2.5);
+  const wallW = Math.max(railWidthM + 3.4, 5.4);
+  const roomDepth = Math.max(5.5, ceilingY * 1.7);
+  return {
+    railWidthM,
+    curtainH,
+    winW,
+    winH,
+    sillY,
+    winTopY,
+    winCenterY: sillY + winH / 2,
+    railY,
+    ceilingY,
+    wallW,
+    roomDepth,
+  };
+}
+
+// Depth budget in front of the wall (wall face is at WALL_Z = -0.22):
+//   window frame front  -0.17
+//   sill front edge     -0.115  (SILL_FRONT_Z)
+//   curtain travel limit -0.09  (CURTAIN_Z_MIN — 2.5 cm clear of the sill)
+//   rod / fabric plane    0.00
+// The panel used to be allowed back to -0.145, which put its fold troughs
+// inside the sill; that is what was punching through the cloth.
+const SILL_FRONT_Z = -0.115;
+const CURTAIN_Z_MIN = -0.09;
+// A fold can billow as far into the room as it likes, but behind the rod it
+// runs out of room — so the rearward half of the wave saturates rather than
+// being clipped flat by the collision clamp. Cloth genuinely behaves this way:
+// the wall is what stops it.
+const FOLD_BACK_LIMIT = 0.07;
+const RETURN_DEPTH = 0.07; // outer edge wraps back toward the wall bracket
+const RETURN_ZONE = 0.13; // width of that wrap, in metres
+
+/**
+ * Mesh resolution for a panel. Shared by the geometry builder and the cloth
+ * simulation — if these two disagree the physics writes to the wrong vertices,
+ * so there is exactly one definition. Roughly 13+ segments per fold, which is
+ * where the folds stop looking faceted.
+ */
+function curtainSegments(widthM: number, fullness: number) {
+  return {
+    w: Math.max(80, Math.min(240, Math.round(widthM * 95 * fullness))),
+    h: 14,
+  };
+}
+
+/** Folds per metre of finished width, before fullness is applied. */
+function foldDensity(header: CurtainHeader): number {
+  if (header === "pencil") return 1.6;
+  if (header === "single-pinch") return 1.15;
+  if (header === "eyelet") return 0.85;
+  return 1.0;
+}
+
+/**
+ * Where the panel is attached to the hardware, in panel-local x.
+ *
+ * This is the single source of truth for both the cloth and the rail: a hook
+ * has to sit on the pleat it carries, so the geometry phases its folds to
+ * these positions and the rail hangs its rings at exactly the same ones.
+ *
+ * Pleated headers attach at every fold crest — the pleat *is* the fold, pinched
+ * into the heading tape. Eyelets attach twice per fold instead: the rod runs
+ * through every eyelet and the cloth between two of them swings alternately
+ * to the front and the back of the rod, so an eyelet lands on each zero
+ * crossing of the wave, not on its crest.
+ */
+function attachmentLayout(
+  widthM: number,
+  fullness: number,
+  header: CurtainHeader,
+  side: "left" | "right"
+) {
+  const totalFolds = Math.max(2, Math.round(2.6 * fullness * foldDensity(header) * widthM));
+  const perFold = header === "eyelet" ? 2 : 1;
+  const count = totalFolds * perFold;
+  const spacing = widthM / count;
+  // Numbered from the free leading edge inwards, so the pleat that shows most
+  // is always a whole one and the last one lands on the return.
+  const leadingX = side === "left" ? widthM / 2 : -widthM / 2;
+  const dir = side === "left" ? -1 : 1;
+  const positions: number[] = [];
+  for (let k = 0; k <= count; k++) positions.push(leadingX + dir * k * spacing);
+  return { totalFolds, spacing, positions, leadingX };
+}
 
 function curtainGeometry(
   widthM: number,
   heightM: number,
   reserve: FabricReserve,
   header: CurtainHeader,
+  side: "left" | "right",
   material?: FabricSwatch["material"]
 ): THREE.BufferGeometry {
   const fullness = RESERVE_FACTOR[reserve];
-  const segments = Math.max(80, Math.min(160, Math.round(widthM * 70 * fullness)));
-  const heightSegs = 14;
-  const geo = new THREE.PlaneGeometry(widthM, heightM, segments, heightSegs);
+  const segs = curtainSegments(widthM, fullness);
+  const geo = new THREE.PlaneGeometry(widthM, heightM, segs.w, segs.h);
   const pos = geo.attributes.position;
 
-  const headerDensity =
-    header === "pencil" ? 1.6 :
-    header === "single-pinch" ? 1.15 :
-    header === "eyelet" ? 0.85 :
-    1.0;
-  const foldsPerMeter = 2.6 * fullness * headerDensity;
-  const totalFolds = Math.max(2, Math.round(foldsPerMeter * widthM));
+  const attach = attachmentLayout(widthM, fullness, header, side);
+  const totalFolds = attach.totalFolds;
+  const isEyelet = header === "eyelet";
 
   // Material weight affects drape: heavy fabrics (velvet, wool) hang straighter
   // with deeper, fewer folds; light fabrics (sheer, silk) flutter more
@@ -50,7 +179,9 @@ function curtainGeometry(
     material === "linen" ? 1.1 :
     1.0;
 
-  const baseAmp = (0.035 + 0.025 * (fullness - 1)) * weightFactor;
+  // Half-depth of a fold. A pinch-pleat curtain at 2× fullness projects roughly
+  // 10–14 cm front to back, so amplitude lands around 0.05–0.07 m.
+  const baseAmp = (0.03 + 0.031 * (fullness - 1)) * weightFactor;
 
   const seed = (widthM * 1000 + heightM * 100) | 0;
   let rngState = seed;
@@ -65,16 +196,44 @@ function curtainGeometry(
     foldAmps.push(0.65 + rng() * 0.7);
   }
 
-  const ringCount = Math.max(4, Math.round((widthM + 0.4) * 5));
-  const ringSpacing = (widthM + 0.4) / (ringCount - 1);
-  const railLeft = -widthM / 2 - 0.2;
+  const halfW0 = widthM / 2;
+  // Outer edge = the one against the wall; it returns back to the bracket.
+  const outerX = side === "right" ? halfW0 : -halfW0;
+  const leadingX = attach.leadingX;
+
+  // Phase the wave onto the hardware. A pleated panel ends in a whole rounded
+  // fold at its leading edge (crest = π/2); an eyelet panel ends on an eyelet,
+  // which sits on the rod plane (zero crossing = 0).
+  const phaseAtLeading = (leadingX / widthM) * totalFolds * Math.PI * 2;
+  const phaseShift = (isEyelet ? 0 : Math.PI / 2) - phaseAtLeading;
+
+  // Fabric wrapping around to the wall smooths out; folds die into the return.
+  function returnBlend(x: number): number {
+    const t = 1 - Math.min(1, Math.abs(x - outerX) / RETURN_ZONE);
+    return t * t;
+  }
 
   function foldDisplacement(x: number, yNorm: number): number {
     const foldIdx = (x / widthM) * totalFolds;
-    const foldPhase = foldIdx * Math.PI * 2;
-    const foldI = Math.floor(Math.abs(foldIdx)) % foldOffsets.length;
-    const phaseOffset = foldOffsets[foldI];
-    const ampVar = foldAmps[foldI];
+    const foldPhase = foldIdx * Math.PI * 2 + phaseShift;
+    // Per-fold variation has to be blended between neighbours, not stepped:
+    // a jump at each fold boundary creases the surface and the panel ends up
+    // looking like vertical blinds instead of cloth.
+    const fAbs = Math.abs(foldIdx);
+    const i0 = Math.floor(fAbs) % foldOffsets.length;
+    const i1 = (i0 + 1) % foldOffsets.length;
+    const f = fAbs - Math.floor(fAbs);
+    const blend = f * f * (3 - 2 * f);
+    // Near the header the hardware dictates the shape: pleats are pinched at
+    // fixed centres by the hooks, so the random wander has to fade out or the
+    // folds drift off the rings they are supposed to hang from. Lower down the
+    // cloth is free and the irregularity comes back.
+    const lock = Math.min(1, Math.max(0, (yNorm - 0.62) / 0.28));
+    const free = 1 - lock * lock * (3 - 2 * lock);
+    const phaseOffset =
+      (foldOffsets[i0] + (foldOffsets[i1] - foldOffsets[i0]) * blend) * free;
+    const ampVarRaw = foldAmps[i0] + (foldAmps[i1] - foldAmps[i0]) * blend;
+    const ampVar = 1 + (ampVarRaw - 1) * free;
 
     let topTaper = 1;
     if (header === "triple-pinch") {
@@ -85,8 +244,9 @@ function curtainGeometry(
       // small evenly-spaced pinches — short taper, less aggressive than triple
       topTaper = yNorm > 0.95 ? Math.max(0.15, (1 - yNorm) / 0.05 * 0.85) : 1;
     } else if (header === "eyelet") {
-      // grommet top: flat between rings, vertical drape begins below
-      topTaper = yNorm > 0.97 ? 0.05 : yNorm > 0.92 ? 0.6 : 1;
+      // The rod itself holds the wave open at the header, so an eyelet panel
+      // is at its crispest right at the top — no taper, a touch of extra depth.
+      topTaper = yNorm > 0.9 ? 1.12 : 1;
     } else if (header === "pencil") {
       // tightly gathered top — fold amplitude actually amplified near top
       topTaper = yNorm > 0.92 ? 1.25 : 1;
@@ -95,11 +255,31 @@ function curtainGeometry(
     const gravityCurve = Math.pow(Math.max(yNorm, 0.15), -0.18 * weightFactor);
     const gravityFactor = Math.min(1.25, 0.6 + 0.55 * (1 - yNorm) * gravityCurve);
 
-    const amp = baseAmp * topTaper * gravityFactor * ampVar;
+    const ret = returnBlend(x);
+    const amp = baseAmp * topTaper * gravityFactor * ampVar * (1 - 0.75 * ret);
 
-    let z = Math.sin(foldPhase + phaseOffset) * amp;
+    // Fold cross-section: from inside the room a curtain reads as broad,
+    // rounded crests separated by narrow deep creases — not a plain sine.
+    const s = Math.sin(foldPhase + phaseOffset);
+    const shaped = s >= 0 ? Math.pow(s, 0.82) : -Math.pow(-s, 1.3);
+    let z = shaped * amp;
 
-    z += Math.sin(foldPhase * 2 + phaseOffset * 1.7) * amp * 0.22;
+    z += Math.sin(foldPhase * 2 + phaseOffset * 1.7) * amp * 0.18;
+
+    // Pinch pleats: above the heading tape the cloth between pleats lies flat
+    // (that's the taper above), while the pleat itself is gathered into a
+    // bunch that stands proud of the tape. Without these the header just
+    // fades to a flat band and the panel loses what makes it a pinch pleat.
+    if (
+      (header === "triple-pinch" || header === "single-pinch" || header === "flemish") &&
+      yNorm > 0.86
+    ) {
+      const band = Math.min(1, (yNorm - 0.86) / 0.11);
+      const crest = Math.max(0, Math.sin(foldPhase + phaseOffset));
+      const pinch = Math.pow(crest, 5); // narrow spike centred on the pleat
+      const depth = header === "flemish" ? 1.15 : header === "single-pinch" ? 0.7 : 1.0;
+      z += pinch * baseAmp * 0.95 * depth * band;
+    }
 
     // Pencil pleats: extra high-frequency vertical ridges in the top band
     if (header === "pencil" && yNorm > 0.88) {
@@ -107,31 +287,23 @@ function curtainGeometry(
       z += ridge * Math.min(1, (yNorm - 0.88) / 0.06);
     }
 
-    // Eyelet: sinusoidal scallop at the very top mimicking fabric draped between grommets
-    if (header === "eyelet" && yNorm > 0.94) {
-      const scallop = Math.sin(foldPhase * 0.5) * baseAmp * 0.9;
-      z += scallop * ((yNorm - 0.94) / 0.06);
-    }
+    // Saturate the rearward half of the fold. tanh is linear for shallow
+    // troughs, so ordinary folds are untouched; only the deepest ones ease off
+    // as they approach the limit, instead of being sheared off by the clamp.
+    if (z < 0) z = -FOLD_BACK_LIMIT * Math.tanh(-z / FOLD_BACK_LIMIT);
 
-    const relX = x - railLeft;
-    const ringProgress = (relX % ringSpacing) / ringSpacing;
-    const catenarySag = -4 * ringSpacing * ringSpacing * 0.0012 * ringProgress * (1 - ringProgress);
-    const catenaryDepth = (1 - yNorm) * 0.8 + 0.2;
-    z += catenarySag * catenaryDepth;
+    // The return: the wall-side edge wraps back to the bracket instead of
+    // stopping flat in mid-air. Slightly shallower at the hem, where the
+    // fabric is free to swing.
+    z -= RETURN_DEPTH * ret * (0.85 + 0.15 * yNorm);
 
     return z;
   }
 
-  // Edge behavior: leading edge (center side) curves forward slightly
-  // outer edge (wall side) is flatter against the wall
-  function edgeBias(x: number, halfW: number): number {
-    const distFromEdge = Math.min(Math.abs(x + halfW), Math.abs(x - halfW));
-    const normalized = distFromEdge / halfW;
-    // Center edge pushes forward, wall edge stays back
-    return normalized * normalized * 0.025;
-  }
-
-  const halfW = widthM / 2;
+  // Ambient occlusion, baked per vertex. Light barely reaches the bottom of a
+  // crease between two folds, and no amount of direct lighting reproduces that
+  // on its own — without it the cloth reads as corrugated plastic.
+  const colors = new Float32Array(pos.count * 3);
 
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -147,12 +319,38 @@ function curtainGeometry(
       z += Math.sin(y * 1.7 + x * totalFolds * Math.PI / widthM * 0.5) * baseAmp * 0.1;
     }
 
-    // Edge bias
-    z += edgeBias(x, halfW) * (1 - yNorm * 0.3);
+    // Weighted hem: the lead tape in the bottom few centimetres holds the
+    // cloth and pulls the very edge back toward the mean plane.
+    if (yNorm < 0.035) {
+      const settle = 1 - yNorm / 0.035;
+      z *= 1 - 0.12 * settle;
+    }
 
     pos.setZ(i, z);
+
+    // The top edge is carried at the hooks and sags a little between them.
+    // A dead-straight top edge floating under the hardware was the main reason
+    // the panel didn't look attached to anything. Eyelet headers are stiffened
+    // with buckram and stay straight, so they are left alone.
+    if (!isEyelet && yNorm > 0.8) {
+      const band = (yNorm - 0.8) / 0.2;
+      const frac = ((x - leadingX) / attach.spacing) % 1;
+      const between = Math.sin(Math.PI * Math.abs(frac));
+      pos.setY(i, y - between * between * 0.011 * band * band);
+    }
+
+    // Depth within the fold, 0 at the back of a crease → 1 on the crest.
+    const t = Math.min(1, Math.max(0, z / (baseAmp * 2.4) + 0.5));
+    let ao = 0.66 + 0.34 * (t * t * (3 - 2 * t));
+    ao *= 1 - 0.16 * returnBlend(x); // the return is tucked against the wall
+    ao *= 1 - 0.1 * Math.max(0, 1 - yNorm / 0.12); // less light near the floor
+    if (yNorm > 0.9) ao *= 1 - 0.12 * ((yNorm - 0.9) / 0.1); // shaded under the header
+    colors[i * 3] = ao;
+    colors[i * 3 + 1] = ao;
+    colors[i * 3 + 2] = ao;
   }
 
+  geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   return geo;
 }
@@ -241,27 +439,245 @@ function fabricNormalMap(pattern: FabricSwatch["pattern"]): THREE.Texture {
   return tex;
 }
 
+// --- Room surfaces -----------------------------------------------------
+// All procedural: no extra assets to ship, and every tile is sized in metres
+// so the grain and weave stay at a believable physical scale.
+
+// Only the painted canvases are cached. Textures are built per mount: R3F
+// disposes them when the Canvas unmounts, and handing a disposed texture to a
+// later mount uploads nothing and renders black.
+function texFromCanvas(canvas: HTMLCanvasElement, srgb: boolean): THREE.Texture {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 8;
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+let floorCanvasCache: { map: HTMLCanvasElement; normal: HTMLCanvasElement } | null = null;
+
+/** Oak plank floor: one tile = 2 m × 2 m, planks running away from the wall. */
+function floorCanvases() {
+  if (floorCanvasCache) return floorCanvasCache;
+  const size = 1024;
+  const planks = 11; // ≈18 cm wide boards
+  const plankW = size / planks;
+  const rowH = size / 2; // ≈1 m long boards, staggered per column
+
+  const make = (normal: boolean) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = normal ? "#8080ff" : "#b08e66";
+    ctx.fillRect(0, 0, size, size);
+
+    for (let p = 0; p < planks; p++) {
+      const x = p * plankW;
+      const offset = ((p * 0.37) % 1) * rowH; // stagger the end joints
+      for (let r = -1; r < 3; r++) {
+        const y = r * rowH + offset;
+        if (!normal) {
+          // Board tone varies plank to plank, as sawn oak does.
+          const warm = 0.86 + ((p * 7 + r * 13) % 11) / 40;
+          const rC = Math.min(255, 176 * warm);
+          const gC = Math.min(255, 142 * warm);
+          const bC = Math.min(255, 102 * warm);
+          ctx.fillStyle = `rgb(${rC | 0},${gC | 0},${bC | 0})`;
+          ctx.fillRect(x, y, plankW, rowH);
+
+          // Grain: long, low-contrast streaks along the board.
+          for (let g = 0; g < 26; g++) {
+            const gx = x + Math.random() * plankW;
+            const dark = Math.random() > 0.5;
+            ctx.strokeStyle = dark
+              ? `rgba(96,68,42,${0.05 + Math.random() * 0.12})`
+              : `rgba(226,200,164,${0.04 + Math.random() * 0.08})`;
+            ctx.lineWidth = 0.6 + Math.random() * 2.2;
+            ctx.beginPath();
+            ctx.moveTo(gx, y);
+            for (let s = 0; s <= 6; s++) {
+              ctx.lineTo(gx + Math.sin(s * 0.9 + g) * 2.5, y + (rowH / 6) * s);
+            }
+            ctx.stroke();
+          }
+        }
+        // Board joints: a dark seam plus a bevel highlight either side.
+        ctx.strokeStyle = normal ? "rgba(110,110,255,0.9)" : "rgba(74,52,32,0.55)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + plankW, y);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = normal ? "rgba(150,110,255,0.9)" : "rgba(74,52,32,0.6)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size);
+      ctx.stroke();
+    }
+
+    return canvas;
+  };
+
+  floorCanvasCache = { map: make(false), normal: make(true) };
+  return floorCanvasCache;
+}
+
+let wallCanvasCache: HTMLCanvasElement | null = null;
+
+/** Painted plaster: fine tooth, one tile = 1.5 m. */
+function wallCanvas() {
+  if (wallCanvasCache) return wallCanvasCache;
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ece6da";
+  ctx.fillRect(0, 0, size, size);
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 9;
+    img.data[i] += n;
+    img.data[i + 1] += n;
+    img.data[i + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
+  // A few broad trowel sweeps so large flat areas aren't perfectly uniform.
+  for (let i = 0; i < 40; i++) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.02 + Math.random() * 0.03})`;
+    ctx.lineWidth = 8 + Math.random() * 26;
+    ctx.beginPath();
+    ctx.moveTo(Math.random() * size, Math.random() * size);
+    ctx.lineTo(Math.random() * size, Math.random() * size);
+    ctx.stroke();
+  }
+  wallCanvasCache = canvas;
+  return canvas;
+}
+
+let viewCanvasCache: HTMLCanvasElement | null = null;
+
+/** What's outside: hazy sky, layered treeline, lawn — painted, then blurred. */
+function outdoorCanvas() {
+  if (viewCanvasCache) return viewCanvasCache;
+  const w = 512;
+  const h = 640;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+
+  const horizon = h * 0.66;
+  const sky = ctx.createLinearGradient(0, 0, 0, horizon);
+  sky.addColorStop(0, "#8fb6d8");
+  sky.addColorStop(0.55, "#c2d8e6");
+  sky.addColorStop(1, "#e6ecec");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, horizon);
+
+  // Sun haze, off to one side — it's also where the key light comes from.
+  const glow = ctx.createRadialGradient(w * 0.74, h * 0.16, 0, w * 0.74, h * 0.16, h * 0.42);
+  glow.addColorStop(0, "rgba(255,248,228,0.85)");
+  glow.addColorStop(1, "rgba(255,248,228,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, horizon);
+
+  try {
+    ctx.filter = "blur(3px)";
+  } catch {
+    /* filter unsupported — the painting still reads fine */
+  }
+  // Soft clouds
+  for (let i = 0; i < 9; i++) {
+    const cx = Math.random() * w;
+    const cy = h * (0.05 + Math.random() * 0.3);
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.35})`;
+    for (let b = 0; b < 5; b++) {
+      ctx.beginPath();
+      ctx.ellipse(cx + b * 18 - 36, cy + Math.sin(b) * 5, 34 - b * 3, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Distant ridge, hazy and desaturated.
+  ctx.filter = "blur(6px)";
+  ctx.fillStyle = "#a7b6b0";
+  ctx.beginPath();
+  ctx.moveTo(0, horizon);
+  for (let x = 0; x <= w; x += 16) {
+    ctx.lineTo(x, horizon - 46 - Math.sin(x * 0.011) * 26 - Math.sin(x * 0.031) * 11);
+  }
+  ctx.lineTo(w, horizon);
+  ctx.closePath();
+  ctx.fill();
+
+  // Treeline: two layers, the nearer one darker and sharper.
+  const treeRow = (baseY: number, color: string, scale: number, blur: number) => {
+    ctx.filter = `blur(${blur}px)`;
+    ctx.fillStyle = color;
+    for (let x = -40; x < w + 40; x += 26 * scale) {
+      const r = (20 + Math.random() * 22) * scale;
+      const y = baseY - r * 0.45 + Math.random() * 10;
+      ctx.beginPath();
+      ctx.ellipse(x + Math.random() * 12, y, r, r * (0.8 + Math.random() * 0.5), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  treeRow(horizon - 6, "#7d9075", 0.85, 4);
+  treeRow(horizon + 10, "#5c7355", 1.15, 2.5);
+
+  // Lawn falling away from the window.
+  ctx.filter = "none";
+  const grass = ctx.createLinearGradient(0, horizon, 0, h);
+  grass.addColorStop(0, "#6f8459");
+  grass.addColorStop(1, "#899a60");
+  ctx.fillStyle = grass;
+  ctx.fillRect(0, horizon, w, h - horizon);
+  try {
+    ctx.filter = "blur(2px)";
+  } catch {
+    /* ignore */
+  }
+  for (let i = 0; i < 260; i++) {
+    const y = horizon + Math.random() * (h - horizon);
+    const t = (y - horizon) / (h - horizon);
+    ctx.fillStyle = `rgba(${90 + t * 40},${110 + t * 30},${70 + t * 20},0.35)`;
+    ctx.fillRect(Math.random() * w, y, 2 + t * 6, 1 + t * 3);
+  }
+  ctx.filter = "none";
+
+  viewCanvasCache = canvas;
+  return canvas;
+}
+
 const CurtainPanel = memo(function CurtainPanel({
   side,
   widthM,
   heightM,
   config,
   fabric,
-  railWidthM,
+  topY,
   xOffset,
+  zOffset,
 }: {
   side: "left" | "right";
   widthM: number;
   heightM: number;
   config: CurtainConfig;
   fabric: FabricSwatch;
-  railWidthM: number;
+  topY: number;
   xOffset: number;
+  zOffset: number;
 }) {
   const isPhoto = fabric.pattern === "photo";
   const geo = useMemo(
-    () => curtainGeometry(widthM, heightM, config.reserve, config.header, fabric.material),
-    [widthM, heightM, config.reserve, config.header, fabric.material]
+    () => curtainGeometry(widthM, heightM, config.reserve, config.header, side, fabric.material),
+    [widthM, heightM, config.reserve, config.header, side, fabric.material]
   );
   const basePositions = useMemo(() => Float32Array.from(geo.attributes.position.array), [geo]);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -269,10 +685,14 @@ const CurtainPanel = memo(function CurtainPanel({
   // Verlet sway: per-vertex Z/X offset from rest, integrated each frame.
   // Top row pinned (yNorm=1). Horizontal coupling makes the cloth resist local
   // creases. Wind force is a low-frequency noise field. Damping bleeds energy.
-  const segCountW = useMemo(() => {
-    return Math.max(80, Math.min(160, Math.round(widthM * 70 * RESERVE_FACTOR[config.reserve]))) + 1;
-  }, [widthM, config.reserve]);
-  const segCountH = 15; // matches heightSegs+1 in curtainGeometry
+  const segCountW = useMemo(
+    () => curtainSegments(widthM, RESERVE_FACTOR[config.reserve]).w + 1,
+    [widthM, config.reserve]
+  );
+  const segCountH = useMemo(
+    () => curtainSegments(widthM, RESERVE_FACTOR[config.reserve]).h + 1,
+    [widthM, config.reserve]
+  );
 
   const physics = useMemo(() => {
     const n = segCountW * segCountH;
@@ -284,7 +704,7 @@ const CurtainPanel = memo(function CurtainPanel({
       scratchZ: new Float32Array(n),
       scratchX: new Float32Array(n),
     };
-  }, [segCountW]);
+  }, [segCountW, segCountH]);
 
   // Material weight: heavy fabric damps more, sways less
   const weight =
@@ -380,9 +800,9 @@ const CurtainPanel = memo(function CurtainPanel({
     }
 
     // 3. Apply offsets to geometry, clamped so the curtain cannot pass through
-    // the back wall (z=-0.22) or window frame (z≈-0.17). Curtain hangs at z=0.
-    // Min allowed world-Z for a vertex: -0.04 (stays clear of window surface).
-    const Z_MIN = -0.04;
+    // the back wall (z=-0.22) or window frame (z≈-0.17). The panel's own z
+    // offset is part of the budget, so the limit is expressed in local space.
+    const Z_MIN = CURTAIN_Z_MIN - zOffset;
     const pos = meshRef.current.geometry.attributes.position;
     for (let yi = 0; yi < H; yi++) {
       for (let xi = 0; xi < W; xi++) {
@@ -427,24 +847,60 @@ const CurtainPanel = memo(function CurtainPanel({
   );
   const tex = isPhoto ? photoTex : canvasTex!;
 
+  // Texture scale is physical, not per-panel: one tile ≈ 30 cm of cloth. The
+  // panel is drawn at its *finished* width, so the fabric it was cut from —
+  // width × fullness — is what the weave has to be compressed into.
   useEffect(() => {
-    const repeats = Math.max(2, Math.round(widthM * 2));
-    tex.repeat.set(repeats, Math.max(2, Math.round(heightM * 1.5)));
-    normalMap.repeat.set(repeats, Math.max(2, Math.round(heightM * 1.5)));
-  }, [tex, normalMap, widthM, heightM]);
-  const roughness = fabric.material === "velvet" ? 0.55 : fabric.material === "silk-blend" ? 0.45 : 0.85;
+    const isPattern = isPhoto || fabric.pattern === "floral" || fabric.pattern === "geometric";
+    const tile = isPattern ? 0.5 : 0.3;
+    const flatWidth = widthM * RESERVE_FACTOR[config.reserve];
+    const repX = Math.max(2, Math.round(flatWidth / tile));
+    const repY = Math.max(2, Math.round(heightM / tile));
+    tex.repeat.set(repX, repY);
+    // The weave itself stays at its own scale regardless of the print.
+    const nRep = Math.max(3, Math.round((widthM * RESERVE_FACTOR[config.reserve]) / 0.22));
+    normalMap.repeat.set(nRep, Math.max(3, Math.round(heightM / 0.22)));
+  }, [tex, normalMap, widthM, heightM, isPhoto, fabric.pattern, config.reserve]);
+
+  // Cloth response per material: velvet has a strong, tight sheen and almost
+  // no specular; linen and wool a broad dry one; silk sits between.
+  const { roughness, sheen, sheenRoughness, normalScale } =
+    fabric.material === "velvet"
+      ? { roughness: 0.92, sheen: 1.0, sheenRoughness: 0.28, normalScale: 0.35 }
+      : fabric.material === "wool"
+      ? { roughness: 0.95, sheen: 0.55, sheenRoughness: 0.75, normalScale: 0.9 }
+      : fabric.material === "silk-blend"
+      ? { roughness: 0.55, sheen: 0.7, sheenRoughness: 0.35, normalScale: 0.4 }
+      : fabric.material === "linen"
+      ? { roughness: 0.88, sheen: 0.45, sheenRoughness: 0.8, normalScale: 1.05 }
+      : fabric.material === "synthetic"
+      ? { roughness: 0.72, sheen: 0.35, sheenRoughness: 0.5, normalScale: 0.55 }
+      : { roughness: 0.82, sheen: 0.42, sheenRoughness: 0.7, normalScale: 0.85 };
+
   const transparent = fabric.transparency === "sheer" || fabric.transparency === "translucent";
   const opacity =
     fabric.transparency === "sheer" ? 0.55 : fabric.transparency === "translucent" ? 0.78 : 1;
 
   return (
-    <mesh ref={meshRef} position={[xOffset, RAIL_Y - heightM / 2, 0]} geometry={geo} castShadow receiveShadow>
-      <meshStandardMaterial
+    <mesh
+      ref={meshRef}
+      position={[xOffset, topY - heightM / 2, zOffset]}
+      geometry={geo}
+      castShadow
+      receiveShadow
+    >
+      <meshPhysicalMaterial
         map={tex}
+        vertexColors
         normalMap={normalMap}
-        normalScale={new THREE.Vector2(0.6, 0.6)}
+        normalScale={new THREE.Vector2(normalScale, normalScale)}
         color={isPhoto && !fabric.textureUrl ? fabric.hex : "#ffffff"}
         roughness={roughness}
+        metalness={0}
+        sheen={sheen}
+        sheenRoughness={sheenRoughness}
+        sheenColor={new THREE.Color("#ffffff")}
+        specularIntensity={fabric.material === "silk-blend" ? 0.5 : 0.18}
         side={THREE.DoubleSide}
         transparent={transparent}
         opacity={opacity}
@@ -453,23 +909,61 @@ const CurtainPanel = memo(function CurtainPanel({
   );
 });
 
-const Rail = memo(function Rail({ widthM, header }: { widthM: number; header: CurtainHeader }) {
-  const totalW = widthM + 0.4;
+const Rail = memo(function Rail({
+  widthM,
+  header,
+  railY,
+  attachXs,
+  fabricTopY,
+}: {
+  widthM: number;
+  header: CurtainHeader;
+  railY: number;
+  /** World x of every point where a panel is actually hung. */
+  attachXs: number[];
+  /** World y of the fabric's top edge, so hooks reach it instead of stopping short. */
+  fabricTopY: number;
+}) {
+  // A rod is cut to the curtain's span plus a finial's worth of clearance —
+  // not the 40 cm of bare metal that used to hang past the fabric.
+  const totalW = widthM + 0.12;
   const isEyelet = header === "eyelet";
   const isPencil = header === "pencil";
   const isSinglePinch = header === "single-pinch";
-  const attachCount = isEyelet
-    ? Math.max(6, Math.round(totalW * 4))
-    : isPencil
-    ? Math.max(8, Math.round(totalW * 8))
-    : isSinglePinch
-    ? Math.max(5, Math.round(totalW * 4))
-    : Math.max(4, Math.round(totalW * 5));
-  const attachSpacing = totalW / (attachCount - 1);
+  const isTrack = isPencil || isSinglePinch;
+  // Gliders sit under the track, rings on the rod; either way the hook has to
+  // span whatever is left between the carrier and the top of the cloth.
+  const carrierBottom = isTrack ? -0.078 : -0.027;
+  const hookSpan = Math.max(0, railY - fabricTopY + carrierBottom);
+
+  // Brackets carry the rod back to the wall — a rod floating in mid-air was
+  // one of the clearest tells that this was a diagram, not a room.
+  const bracketXs =
+    totalW > 2.6 ? [-totalW / 2 + 0.16, 0, totalW / 2 - 0.16] : [-totalW / 2 + 0.16, totalW / 2 - 0.16];
+  const bracketReach = Math.abs(WALL_Z) - 0.01;
 
   return (
-    <group position={[0, RAIL_Y, 0]}>
-      {isPencil || isSinglePinch ? (
+    <group position={[0, railY, 0]}>
+      {bracketXs.map((bx, i) => (
+        <group key={`br${i}`} position={[bx, 0, 0]}>
+          {/* arm from wall to rod */}
+          <mesh position={[0, -0.005, -bracketReach / 2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.008, 0.008, bracketReach, 10]} />
+            <meshStandardMaterial color="#232323" metalness={0.6} roughness={0.4} />
+          </mesh>
+          {/* wall plate */}
+          <mesh position={[0, -0.005, -bracketReach]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.028, 0.028, 0.008, 16]} />
+            <meshStandardMaterial color="#1d1d1d" metalness={0.55} roughness={0.45} />
+          </mesh>
+          {/* saddle holding the rod */}
+          <mesh position={[0, -0.018, 0]} castShadow>
+            <boxGeometry args={[0.02, 0.03, 0.05]} />
+            <meshStandardMaterial color="#1d1d1d" metalness={0.6} roughness={0.4} />
+          </mesh>
+        </group>
+      ))}
+      {isTrack ? (
         <>
           {/* Flat ceiling-mounted track */}
           <mesh castShadow>
@@ -493,190 +987,263 @@ const Rail = memo(function Rail({ widthM, header }: { widthM: number; header: Cu
         </>
       ) : (
         <>
-          <mesh castShadow>
-            <boxGeometry args={[totalW, 0.04, 0.04]} />
-            <meshStandardMaterial color="#1a1a1a" metalness={0.4} roughness={0.5} />
+          {/* Round rod, Ø28 mm — the standard size, and it catches light
+              along its length the way a flat box never did. */}
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.014, 0.014, totalW, 20]} />
+            <meshStandardMaterial color="#232323" metalness={0.65} roughness={0.35} />
           </mesh>
-          <mesh position={[-widthM / 2 - 0.2, 0, 0]}>
-            <sphereGeometry args={[0.035, 16, 12]} />
-            <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.4} />
-          </mesh>
-          <mesh position={[widthM / 2 + 0.2, 0, 0]}>
-            <sphereGeometry args={[0.035, 16, 12]} />
-            <meshStandardMaterial color="#1a1a1a" metalness={0.5} roughness={0.4} />
-          </mesh>
+          {[-1, 1].map((s) => (
+            <group key={s} position={[s * (totalW / 2), 0, 0]}>
+              {/* collar + ball finial */}
+              <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+                <cylinderGeometry args={[0.019, 0.019, 0.018, 16]} />
+                <meshStandardMaterial color="#1a1a1a" metalness={0.7} roughness={0.3} />
+              </mesh>
+              <mesh position={[s * 0.032, 0, 0]} castShadow>
+                <sphereGeometry args={[0.028, 20, 16]} />
+                <meshStandardMaterial color="#1a1a1a" metalness={0.7} roughness={0.28} />
+              </mesh>
+            </group>
+          ))}
         </>
       )}
-      {Array.from({ length: attachCount }).map((_, i) => {
-        const rx = -totalW / 2 + i * attachSpacing;
+      {attachXs.map((rx, i) => {
         if (isEyelet) {
-          // brushed-steel grommet wrapping the rail — ring encircles the bar
+          // Brushed-steel eyelet punched through the cloth, with the rod
+          // running through it. Standard size: 35 mm clear hole on a 28 mm
+          // rod — barely wider than the bar, not the hoop it used to be.
           return (
             <group key={i} position={[rx, 0, 0]}>
               <mesh rotation={[0, Math.PI / 2, 0]} castShadow>
-                <torusGeometry args={[0.045, 0.008, 16, 28]} />
+                <torusGeometry args={[0.0212, 0.0038, 12, 26]} />
                 <meshStandardMaterial color="#c8c8cc" metalness={0.95} roughness={0.2} />
               </mesh>
-              {/* inner darker ring for grommet depth */}
+              {/* shadowed lip on the inside of the hole */}
               <mesh rotation={[0, Math.PI / 2, 0]}>
-                <torusGeometry args={[0.038, 0.003, 8, 24]} />
+                <torusGeometry args={[0.0182, 0.0012, 8, 22]} />
                 <meshStandardMaterial color="#5a5a5e" metalness={0.6} roughness={0.5} />
               </mesh>
             </group>
           );
         }
-        if (isPencil) {
-          // small square glider block hanging from the track
+        if (isTrack) {
+          // Glider running in the track, with the hook that drops into the
+          // pleat tape. The hook is drawn to the real top of the cloth so the
+          // panel is visibly carried rather than floating under the rail.
           return (
-            <group key={i} position={[rx, -0.05, 0]}>
-              <mesh castShadow>
-                <boxGeometry args={[0.022, 0.045, 0.05]} />
+            <group key={i} position={[rx, 0, 0]}>
+              <mesh position={[0, -0.05, 0]} castShadow>
+                <boxGeometry args={[isPencil ? 0.022 : 0.024, 0.045, 0.05]} />
                 <meshStandardMaterial color="#141414" metalness={0.5} roughness={0.45} />
               </mesh>
-              {/* tiny hook loop under the glider */}
-              <mesh position={[0, -0.028, 0]}>
+              <mesh position={[0, -0.078, 0]} rotation={[0, Math.PI / 2, 0]}>
                 <torusGeometry args={[0.006, 0.0015, 6, 12]} />
                 <meshStandardMaterial color="#3a3a3a" metalness={0.7} roughness={0.4} />
               </mesh>
+              {hookSpan > 0.002 && (
+                <mesh position={[0, carrierBottom - hookSpan / 2, 0]}>
+                  <cylinderGeometry args={[0.0016, 0.0016, hookSpan, 6]} />
+                  <meshStandardMaterial color="#3a3a3a" metalness={0.75} roughness={0.35} />
+                </mesh>
+              )}
             </group>
           );
         }
-        if (isSinglePinch) {
-          // square glider block hanging from the track (like pencil)
-          return (
-            <group key={i} position={[rx, -0.05, 0]}>
-              <mesh castShadow>
-                <boxGeometry args={[0.024, 0.045, 0.05]} />
-                <meshStandardMaterial color="#141414" metalness={0.5} roughness={0.45} />
-              </mesh>
-              <mesh position={[0, -0.028, 0]}>
-                <torusGeometry args={[0.007, 0.0015, 6, 12]} />
-                <meshStandardMaterial color="#3a3a3a" metalness={0.7} roughness={0.4} />
-              </mesh>
-            </group>
-          );
-        }
+        // Curtain ring: encircles the rod, with the eyelet and the wire hook
+        // that carries the pleat.
         return (
-          <mesh key={i} position={[rx, -0.04, 0.02]} rotation={[Math.PI / 2, 0, 0]}>
-            <torusGeometry args={[0.018, 0.005, 8, 16]} />
-            <meshStandardMaterial color="#2a2a2a" metalness={0.6} roughness={0.35} />
-          </mesh>
+          <group key={i} position={[rx, 0, 0]}>
+            {/* 50 mm ring on a 28 mm rod, the size that's actually sold */}
+            <mesh rotation={[0, Math.PI / 2, 0]} castShadow>
+              <torusGeometry args={[0.021, 0.004, 12, 24]} />
+              <meshStandardMaterial color="#262626" metalness={0.7} roughness={0.3} />
+            </mesh>
+            <mesh position={[0, -0.027, 0]} rotation={[0, Math.PI / 2, 0]} castShadow>
+              <torusGeometry args={[0.007, 0.002, 8, 16]} />
+              <meshStandardMaterial color="#2e2e2e" metalness={0.7} roughness={0.35} />
+            </mesh>
+            {hookSpan > 0.002 && (
+              <mesh position={[0, carrierBottom - hookSpan / 2, 0]}>
+                <cylinderGeometry args={[0.0018, 0.0018, hookSpan, 6]} />
+                <meshStandardMaterial color="#2e2e2e" metalness={0.75} roughness={0.35} />
+              </mesh>
+            )}
+          </group>
         );
       })}
     </group>
   );
 });
 
-const Room = memo(function Room({ widthM }: { widthM: number }) {
-  const wallW = Math.max(widthM + 6, 8);
-  const wallH = Math.max(RAIL_Y + 2.4, 4.2);
-  const floorDepth = 6;
-  const sideWallZEnd = floorDepth - 0.2;
+/** A wall surface whose plaster texture keeps its physical scale. */
+const WallPanel = memo(function WallPanel({
+  w,
+  h,
+  position,
+  rotation = [0, 0, 0],
+  tint = "#ece6da",
+}: {
+  w: number;
+  h: number;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  tint?: string;
+}) {
+  const map = useMemo(() => {
+    const t = texFromCanvas(wallCanvas(), true);
+    t.repeat.set(Math.max(1, w / 1.5), Math.max(1, h / 1.5));
+    return t;
+  }, [w, h]);
+  useEffect(() => () => map.dispose(), [map]);
+  if (w <= 0 || h <= 0) return null;
+  return (
+    <mesh position={position} rotation={rotation} receiveShadow castShadow>
+      <planeGeometry args={[w, h]} />
+      <meshStandardMaterial map={map} color={tint} roughness={0.96} metalness={0} />
+    </mesh>
+  );
+});
 
-  // Wall is built as 4 strips framing a rectangular hole around the window
-  const winLeft = -WIN_W / 2;
-  const winRight = WIN_W / 2;
-  const winBottom = WIN_BOTTOM_Y;
-  const winTop = WIN_BOTTOM_Y + WIN_H;
-  const wallZ = -0.22;
-  const wallMat = { color: "#ebe5d8", roughness: 0.95 } as const;
+const Room = memo(function Room({ m }: { m: SceneMetrics }) {
+  const { wallW, ceilingY, roomDepth, winW, winH, sillY, winTopY } = m;
+  const sideWallZEnd = roomDepth - 0.2;
+  const sideWallLen = sideWallZEnd + 0.22;
+
+  // Back wall = 4 strips framing the window opening. They cast shadows, so
+  // the daylight coming from outside only reaches the room through the glass.
+  const winLeft = -winW / 2;
+  const winRight = winW / 2;
+
+  const floorTex = useMemo(() => {
+    const c = floorCanvases();
+    return { map: texFromCanvas(c.map, true), normal: texFromCanvas(c.normal, false) };
+  }, []);
+  useEffect(
+    () => () => {
+      floorTex.map.dispose();
+      floorTex.normal.dispose();
+    },
+    [floorTex]
+  );
+  const floorW = wallW + 2;
+  useEffect(() => {
+    floorTex.map.repeat.set(floorW / 2, roomDepth / 2);
+    floorTex.normal.repeat.set(floorW / 2, roomDepth / 2);
+  }, [floorTex, floorW, roomDepth]);
+
+  const trimColor = "#f6f2ea";
 
   return (
     <group>
-      {/* Wall above the window */}
-      <mesh position={[0, (winTop + wallH) / 2, wallZ]} receiveShadow>
-        <planeGeometry args={[wallW, wallH - winTop]} />
-        <meshStandardMaterial {...wallMat} />
-      </mesh>
-      {/* Wall below the window */}
-      <mesh position={[0, winBottom / 2, wallZ]} receiveShadow>
-        <planeGeometry args={[wallW, winBottom]} />
-        <meshStandardMaterial {...wallMat} />
-      </mesh>
-      {/* Wall left of the window */}
-      <mesh position={[(-wallW / 2 + winLeft) / 2, (winBottom + winTop) / 2, wallZ]} receiveShadow>
-        <planeGeometry args={[wallW / 2 + winLeft, WIN_H]} />
-        <meshStandardMaterial {...wallMat} />
-      </mesh>
-      {/* Wall right of the window */}
-      <mesh position={[(wallW / 2 + winRight) / 2, (winBottom + winTop) / 2, wallZ]} receiveShadow>
-        <planeGeometry args={[wallW / 2 - winRight, WIN_H]} />
-        <meshStandardMaterial {...wallMat} />
-      </mesh>
+      {/* Back wall around the opening */}
+      <WallPanel
+        w={wallW}
+        h={ceilingY - winTopY}
+        position={[0, (winTopY + ceilingY) / 2, WALL_Z]}
+      />
+      <WallPanel w={wallW} h={sillY} position={[0, sillY / 2, WALL_Z]} />
+      <WallPanel
+        w={wallW / 2 + winLeft}
+        h={winH}
+        position={[(-wallW / 2 + winLeft) / 2, sillY + winH / 2, WALL_Z]}
+      />
+      <WallPanel
+        w={wallW / 2 - winRight}
+        h={winH}
+        position={[(wallW / 2 + winRight) / 2, sillY + winH / 2, WALL_Z]}
+      />
 
-      {/* Side walls — perpendicular to back wall, extending forward */}
-      <mesh
-        position={[wallW / 2, wallH / 2, (sideWallZEnd - 0.22) / 2]}
+      {/* Side walls — slightly cooler, since they face away from the window */}
+      <WallPanel
+        w={sideWallLen}
+        h={ceilingY}
+        position={[wallW / 2, ceilingY / 2, (sideWallZEnd - 0.22) / 2]}
         rotation={[0, -Math.PI / 2, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[sideWallZEnd + 0.22, wallH]} />
-        <meshStandardMaterial {...wallMat} />
-      </mesh>
-      <mesh
-        position={[-wallW / 2, wallH / 2, (sideWallZEnd - 0.22) / 2]}
+        tint="#e5dfd2"
+      />
+      <WallPanel
+        w={sideWallLen}
+        h={ceilingY}
+        position={[-wallW / 2, ceilingY / 2, (sideWallZEnd - 0.22) / 2]}
         rotation={[0, Math.PI / 2, 0]}
+        tint="#e5dfd2"
+      />
+
+      {/* Ceiling — closes the room off, and gives the upper wall somewhere
+          to end instead of fading into the background colour. */}
+      <mesh
+        position={[0, ceilingY, (sideWallZEnd - 0.22) / 2]}
+        rotation={[Math.PI / 2, 0, 0]}
         receiveShadow
       >
-        <planeGeometry args={[sideWallZEnd + 0.22, wallH]} />
-        <meshStandardMaterial {...wallMat} />
+        <planeGeometry args={[wallW, sideWallLen]} />
+        <meshStandardMaterial color="#f7f4ee" roughness={1} />
+      </mesh>
+      {/* Cornice where ceiling meets the back wall */}
+      <mesh position={[0, ceilingY - 0.035, WALL_Z + 0.02]}>
+        <boxGeometry args={[wallW, 0.07, 0.04]} />
+        <meshStandardMaterial color={trimColor} roughness={0.8} />
       </mesh>
 
       {/* Baseboard along back wall */}
-      <mesh position={[0, 0.06, -0.213]}>
-        <boxGeometry args={[wallW, 0.12, 0.012]} />
-        <meshStandardMaterial color="#f6f2ea" roughness={0.7} />
+      <mesh position={[0, 0.06, WALL_Z + 0.007]} castShadow receiveShadow>
+        <boxGeometry args={[wallW, 0.12, 0.014]} />
+        <meshStandardMaterial color={trimColor} roughness={0.7} />
       </mesh>
       {/* Baseboard along side walls */}
-      <mesh position={[wallW / 2 - 0.006, 0.06, (sideWallZEnd - 0.22) / 2]} rotation={[0, -Math.PI / 2, 0]}>
-        <boxGeometry args={[sideWallZEnd + 0.22, 0.12, 0.012]} />
-        <meshStandardMaterial color="#f6f2ea" roughness={0.7} />
+      <mesh
+        position={[wallW / 2 - 0.007, 0.06, (sideWallZEnd - 0.22) / 2]}
+        rotation={[0, -Math.PI / 2, 0]}
+        receiveShadow
+      >
+        <boxGeometry args={[sideWallLen, 0.12, 0.014]} />
+        <meshStandardMaterial color={trimColor} roughness={0.7} />
       </mesh>
-      <mesh position={[-wallW / 2 + 0.006, 0.06, (sideWallZEnd - 0.22) / 2]} rotation={[0, Math.PI / 2, 0]}>
-        <boxGeometry args={[sideWallZEnd + 0.22, 0.12, 0.012]} />
-        <meshStandardMaterial color="#f6f2ea" roughness={0.7} />
+      <mesh
+        position={[-wallW / 2 + 0.007, 0.06, (sideWallZEnd - 0.22) / 2]}
+        rotation={[0, Math.PI / 2, 0]}
+        receiveShadow
+      >
+        <boxGeometry args={[sideWallLen, 0.12, 0.014]} />
+        <meshStandardMaterial color={trimColor} roughness={0.7} />
       </mesh>
 
-      <EuropeanWindow widthM={WIN_W} heightM={WIN_H} y={WIN_BOTTOM_Y + WIN_H / 2} />
+      <EuropeanWindow widthM={winW} heightM={winH} y={m.winCenterY} />
 
       {/* Framed artwork — portrait left, landscape right */}
       <Suspense fallback={null}>
         <FramedArt
-          x={-(WIN_W / 2 + 1.0)}
-          y={WIN_BOTTOM_Y + WIN_H / 2}
+          x={-(winW / 2 + 1.1)}
+          y={Math.min(m.winCenterY + 0.15, ceilingY - 0.75)}
           w={0.55}
           h={0.78}
           src="/artwork_portrait.png"
         />
         <FramedArt
-          x={WIN_W / 2 + 1.1}
-          y={WIN_BOTTOM_Y + WIN_H / 2 + 0.05}
+          x={winW / 2 + 1.2}
+          y={Math.min(m.winCenterY + 0.2, ceilingY - 0.7)}
           w={0.95}
           h={0.62}
           src="/artwork_landscape.png"
         />
       </Suspense>
 
-      {/* Floor — large warm oak plane */}
-      <mesh position={[0, 0, floorDepth / 2 - 0.2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[wallW + 2, floorDepth]} />
-        <meshStandardMaterial color="#b89b78" roughness={0.85} />
+      {/* Oak plank floor */}
+      <mesh position={[0, 0, roomDepth / 2 - 0.2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[floorW, roomDepth]} />
+        <meshStandardMaterial
+          map={floorTex.map}
+          normalMap={floorTex.normal}
+          normalScale={new THREE.Vector2(0.35, 0.35)}
+          roughness={0.62}
+          metalness={0}
+        />
       </mesh>
-      {/* Plank seams running away from the wall */}
-      {Array.from({ length: 30 }).map((_, i) => (
-        <mesh
-          key={i}
-          position={[-wallW / 2 + (i + 1) * (wallW / 31), 0.001, floorDepth / 2 - 0.2]}
-          rotation={[-Math.PI / 2, 0, 0]}
-        >
-          <planeGeometry args={[0.004, floorDepth]} />
-          <meshBasicMaterial color="#8b6f4f" transparent opacity={0.4} />
-        </mesh>
-      ))}
 
-      {/* Decor — always render */}
-      <ConsoleTable x={-(widthM / 2 + 0.8)} />
-      <FloorLamp x={widthM / 2 + 0.9} />
+      {/* Decor — tucked in beside the curtain, clear of the pictures */}
+      <ConsoleTable x={-(m.railWidthM / 2 + 0.52)} />
+      <FloorLamp x={m.railWidthM / 2 + 0.48} />
     </group>
   );
 });
@@ -749,6 +1316,13 @@ const EuropeanWindow = memo(function EuropeanWindow({
 
   // Outdoor view sits behind the glass, deep enough to feel like a real view.
   const viewZ = -revealDepth + 0.005;
+  const outdoorTex = useMemo(() => {
+    const t = texFromCanvas(outdoorCanvas(), true);
+    t.wrapS = THREE.ClampToEdgeWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    return t;
+  }, []);
+  useEffect(() => () => outdoorTex.dispose(), [outdoorTex]);
   return (
     <group position={[0, y, z]}>
       {/* Wall reveal — the painted return between front wall and window */}
@@ -772,49 +1346,12 @@ const EuropeanWindow = memo(function EuropeanWindow({
         <meshStandardMaterial color="#e6dfcf" roughness={0.95} />
       </mesh>
 
-      {/* === Outside view, layered for depth === */}
-      {/* Sky gradient — three vertically stacked bands */}
-      <mesh position={[0, heightM * 0.32, viewZ]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.38]} />
-        <meshBasicMaterial color="#dfe9ef" />
-      </mesh>
-      <mesh position={[0, heightM * 0.05, viewZ + 0.001]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.36]} />
-        <meshBasicMaterial color="#c9d8e0" />
-      </mesh>
-      <mesh position={[0, -heightM * 0.20, viewZ + 0.002]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.16]} />
-        <meshBasicMaterial color="#d3dcd2" />
-      </mesh>
-
-      {/* Distant hill silhouette — far layer */}
-      <mesh position={[-widthM * 0.18, -heightM * 0.20, viewZ + 0.003]}>
-        <circleGeometry args={[heightM * 0.28, 32]} />
-        <meshBasicMaterial color="#a8b5a5" transparent opacity={0.85} />
-      </mesh>
-      <mesh position={[widthM * 0.25, -heightM * 0.22, viewZ + 0.0031]}>
-        <circleGeometry args={[heightM * 0.22, 32]} />
-        <meshBasicMaterial color="#9eac9b" transparent opacity={0.85} />
-      </mesh>
-
-      {/* Closer treeline — mid layer */}
-      <mesh position={[-widthM * 0.05, -heightM * 0.31, viewZ + 0.005]}>
-        <circleGeometry args={[heightM * 0.18, 32]} />
-        <meshBasicMaterial color="#6f8268" />
-      </mesh>
-      <mesh position={[widthM * 0.22, -heightM * 0.30, viewZ + 0.0051]}>
-        <circleGeometry args={[heightM * 0.16, 32]} />
-        <meshBasicMaterial color="#647a5e" />
-      </mesh>
-      <mesh position={[-widthM * 0.32, -heightM * 0.32, viewZ + 0.0052]}>
-        <circleGeometry args={[heightM * 0.14, 32]} />
-        <meshBasicMaterial color="#5f7559" />
-      </mesh>
-
-      {/* Foreground grass strip */}
-      <mesh position={[0, -heightM * 0.43, viewZ + 0.006]}>
-        <planeGeometry args={[widthM - 0.02, heightM * 0.12]} />
-        <meshBasicMaterial color="#7a8a64" />
+      {/* === Outside view === */}
+      {/* One painted plane, oversized and set back behind the reveal so the
+          view shifts a little as the camera moves, like real parallax. */}
+      <mesh position={[0, 0, viewZ - 0.35]}>
+        <planeGeometry args={[widthM * 2.1, heightM * 1.9]} />
+        <meshBasicMaterial map={outdoorTex} toneMapped={false} />
       </mesh>
 
       {/* === Sashes & glass === */}
@@ -823,12 +1360,22 @@ const EuropeanWindow = memo(function EuropeanWindow({
         <planeGeometry args={[widthM - frameT * 2 - 0.01, heightM - frameT * 2 - 0.01]} />
         <meshStandardMaterial
           transparent
-          opacity={0.18}
-          color="#e8eef2"
-          roughness={0.1}
-          metalness={0}
+          opacity={0.12}
+          color="#dfe9ef"
+          roughness={0.05}
+          metalness={0.1}
           side={THREE.DoubleSide}
         />
+      </mesh>
+      {/* Reflection: a slanted sheen across the upper panes. Real glass is
+          never perfectly clear from this angle. */}
+      <mesh position={[-widthM * 0.16, heightM * 0.2, 0.001]} rotation={[0, 0, -0.42]}>
+        <planeGeometry args={[widthM * 0.42, heightM * 0.75]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.07} depthWrite={false} />
+      </mesh>
+      <mesh position={[widthM * 0.2, heightM * 0.05, 0.001]} rotation={[0, 0, -0.42]}>
+        <planeGeometry args={[widthM * 0.13, heightM * 0.6]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.05} depthWrite={false} />
       </mesh>
 
       {/* Outer frame — 4 strips with subtle bevel via slightly different inner color */}
@@ -895,17 +1442,20 @@ const EuropeanWindow = memo(function EuropeanWindow({
         </group>
       ))}
 
-      {/* Sill — deeper, with slight overhang */}
+      {/* Sill — fills the reveal and overhangs the wall, but stops short of
+          the curtain's travel: its front edge lands on SILL_FRONT_Z, which the
+          panel is clamped to stay clear of. It used to reach far enough into
+          the room to punch through the cloth. */}
       <mesh
-        position={[0, -heightM / 2 - 0.025, 0.06]}
+        position={[0, -heightM / 2 - 0.025, SILL_FRONT_Z - z - 0.1]}
         castShadow
         receiveShadow
       >
-        <boxGeometry args={[widthM + 0.2, 0.05, 0.18]} />
+        <boxGeometry args={[widthM + 0.2, 0.05, 0.2]} />
         <meshStandardMaterial color="#f1ead9" roughness={0.6} />
       </mesh>
       {/* Sill apron underneath */}
-      <mesh position={[0, -heightM / 2 - 0.07, 0.02]}>
+      <mesh position={[0, -heightM / 2 - 0.07, SILL_FRONT_Z - z - 0.135]}>
         <boxGeometry args={[widthM + 0.12, 0.04, 0.04]} />
         <meshStandardMaterial color="#ece4cf" roughness={0.7} />
       </mesh>
@@ -1086,6 +1636,29 @@ function Capture({ onReady }: { onReady?: (gl: THREE.WebGLRenderer) => void }) {
   return null;
 }
 
+const CAM_FOV = 42;
+
+/**
+ * Where the camera has to stand for the whole room to fit: eye height, a
+ * three-quarter angle, and a distance derived from the canvas's real aspect
+ * ratio — a portrait phone canvas needs to back off much further than a wide
+ * desktop one to hold the same rail.
+ */
+function cameraFraming(m: SceneMetrics, aspect: number) {
+  const halfFov = Math.tan((CAM_FOV * Math.PI) / 360);
+  const fitH = m.ceilingY * 1.04;
+  const fitW = Math.max(m.railWidthM + 2.0, 3.0);
+  const dist =
+    Math.max(fitH / (2 * halfFov), fitW / (2 * halfFov * Math.max(0.5, aspect))) * 1.12;
+  const position: [number, number, number] = [
+    -dist * 0.44,
+    Math.min(Math.max(m.ceilingY * 0.52, 1.2), 1.8),
+    dist * 0.9,
+  ];
+  const target: [number, number, number] = [0, Math.min(m.railY * 0.55, m.ceilingY * 0.5), 0];
+  return { dist, position, target };
+}
+
 function CameraRig({ position, target }: { position: [number, number, number]; target: [number, number, number] }) {
   const { camera } = useThree();
   const targetPos = useRef(new THREE.Vector3(...position));
@@ -1113,6 +1686,30 @@ function CameraRig({ position, target }: { position: [number, number, number]; t
   });
 
   return null;
+}
+
+/** Keeps the framing correct as the canvas resizes or the config changes. */
+function FramedCamera({ m, controls }: { m: SceneMetrics; controls: boolean }) {
+  const { size } = useThree();
+  const aspect = size.width / Math.max(1, size.height);
+  const { dist, position, target } = useMemo(() => cameraFraming(m, aspect), [m, aspect]);
+  // The rig and the controls both drive the camera, so only one may be live:
+  // once the user takes over, the rig steps aside instead of fighting them.
+  return (
+    <>
+      {!controls && <CameraRig position={position} target={target} />}
+      {controls && (
+        <OrbitControls
+          enablePan={false}
+          minDistance={Math.max(1.2, dist * 0.45)}
+          maxDistance={Math.min(m.roomDepth - 0.8, dist * 1.9)}
+          minPolarAngle={Math.PI / 3.2}
+          maxPolarAngle={Math.PI / 2.05}
+          target={target}
+        />
+      )}
+    </>
+  );
 }
 
 export default function CurtainScene({ config, fabric, onReady, compact = false }: Props) {
@@ -1144,99 +1741,157 @@ export default function CurtainScene({ config, fabric, onReady, compact = false 
   }
   const railWidthM = Math.max(0.6, config.width / 100);
   const heightM = Math.max(0.6, config.height / 100);
+  const drop = headerDrop(config.header);
+  const m = sceneMetrics(railWidthM, heightM, drop);
   const isBoth = config.side === "both";
-  const gap = 0.15;
+  // A closed pair barely parts in the middle; the leading edges pass each
+  // other rather than stopping short of a 15 cm hole.
+  const gap = 0.06;
   const panelWidthM = isBoth ? (railWidthM - gap) / 2 : railWidthM * 0.75;
   const leftXOffset = -railWidthM / 2 + panelWidthM / 2;
   const rightXOffset = railWidthM / 2 - panelWidthM / 2;
 
+  const showLeft = config.side === "left" || isBoth;
+  const showRight = config.side === "right" || isBoth;
+  const topY = m.railY - drop;
+
+  // Every ring, glider and grommet is placed on a pleat of a real panel, in
+  // world x — the hardware is not spaced independently of the cloth it holds.
+  const fullness = RESERVE_FACTOR[config.reserve];
+  const attachXs: number[] = [];
+  if (showLeft) {
+    for (const px of attachmentLayout(panelWidthM, fullness, config.header, "left").positions) {
+      attachXs.push(px + leftXOffset);
+    }
+  }
+  if (showRight) {
+    for (const px of attachmentLayout(panelWidthM, fullness, config.header, "right").positions) {
+      attachXs.push(px + rightXOffset);
+    }
+  }
+
+  // Initial guess only — FramedCamera refines it once the canvas size (and so
+  // the aspect ratio) is known, and keeps it right through resizes.
+  const initialCam = cameraFraming(m, 1.4).position;
+
   return (
     <Canvas
-      camera={{ position: [-1.921, 1.877, 3.481], fov: 45 }}
+      camera={{ position: initialCam, fov: CAM_FOV }}
       shadows={!isMobile}
       frameloop="always"
       dpr={isMobile ? [1, 2] : [1, 1.5]}
       gl={{ preserveDrawingBuffer: true, antialias: true, powerPreference: "high-performance" }}
       onCreated={({ gl }) => {
         gl.toneMapping = THREE.ACESFilmicToneMapping;
-        gl.toneMappingExposure = 1.05;
+        gl.toneMappingExposure = 1.0;
         gl.shadowMap.type = THREE.PCFSoftShadowMap;
       }}
     >
       <Capture onReady={onReady} />
       {compact ? (
-        <CameraRig
-          position={[0, RAIL_Y - 0.05, 0.55]}
-          target={[0, RAIL_Y - 0.12, 0]}
-        />
+        <CameraRig position={[0, m.railY - 0.05, 0.55]} target={[0, m.railY - 0.12, 0]} />
       ) : (
-        <CameraRig position={[-1.921, 1.877, 3.481]} target={[0, WIN_BOTTOM_Y + WIN_H / 2, 0]} />
+        <FramedCamera m={m} controls={!controlsLocked} />
       )}
-      <color attach="background" args={["#f3efe7"]} />
+      <color attach="background" args={["#e9eef0"]} />
       {!isMobile && (
         <Suspense fallback={null}>
-          <Environment files="/room.hdr" background={false} environmentIntensity={0.55} />
+          <Environment files="/room.hdr" background={false} environmentIntensity={0.5} />
         </Suspense>
       )}
-      <ambientLight intensity={0.08} />
+
+      {/* Daylight. The back wall casts shadows, so this only reaches the room
+          through the window opening — it spills around the panels and lands as
+          a patch of sun on the floor instead of a flat frontal wash. */}
       <directionalLight
-        position={[2, 4, 3]}
-        intensity={1.15}
+        position={[m.railWidthM * 0.5 + 1.9, m.ceilingY + 1.3, -5.5]}
+        intensity={1.45}
+        color="#fff4e0"
         castShadow
+        shadow-mapSize-width={isMobile ? 1024 : 2048}
+        shadow-mapSize-height={isMobile ? 1024 : 2048}
+        shadow-camera-left={-(m.wallW / 2 + 1)}
+        shadow-camera-right={m.wallW / 2 + 1}
+        shadow-camera-top={m.ceilingY + 1}
+        shadow-camera-bottom={-1}
+        shadow-camera-near={0.5}
+        shadow-camera-far={18}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.02}
+        target-position={[0, 0, 1.4]}
+      />
+      {/* Sky through the opening: cool, broad, no shadow of its own. */}
+      <directionalLight position={[-1.5, m.ceilingY, -4]} intensity={0.45} color="#dbe7f2" />
+      {/* Room light. With the pair drawn closed the window is blocked, so the
+          front of the cloth lives on bounce light. It rakes across the panels
+          from the side rather than facing them: frontal light flattens folds,
+          a grazing one carves them. */}
+      <directionalLight
+        position={[5.6, m.ceilingY * 0.6, 1.5]}
+        intensity={0.95}
+        color="#fff2df"
+        castShadow={!isMobile}
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
-        shadow-bias={-0.0002}
+        shadow-camera-left={-(m.wallW / 2 + 1)}
+        shadow-camera-right={m.wallW / 2 + 1}
+        shadow-camera-top={m.ceilingY + 0.5}
+        shadow-camera-bottom={-0.5}
+        shadow-camera-near={0.5}
+        shadow-camera-far={16}
+        shadow-bias={-0.0006}
+        shadow-normalBias={0.025}
+        target-position={[0, m.railY * 0.45, 0]}
       />
-      <directionalLight position={[-3, 2, -2]} intensity={0.45} color="#fff4e2" />
-      <directionalLight position={[4, 2.5, 1]} intensity={0.4} color="#fff4e2" />
-      <hemisphereLight args={["#fff5e6", "#bfb39a", 0.55]} />
-      <pointLight position={[0, RAIL_Y * 0.6, 1.5]} intensity={0.4} color="#fff2dc" />
-      <spotLight
-        position={[0, WIN_BOTTOM_Y + WIN_H + 0.3, -0.05]}
-        intensity={0.7}
-        angle={0.7}
-        penumbra={0.8}
-        color="#fff8e8"
-        distance={5}
-        target-position={[0, WIN_BOTTOM_Y + WIN_H * 0.3, 1.2]}
-      />
+      <directionalLight position={[-4.2, m.ceilingY * 0.75, 3.2]} intensity={0.3} color="#fff5ea" />
+      <hemisphereLight args={["#eef4fa", "#c9ab86", 0.55]} />
+      <ambientLight intensity={0.14} />
 
-      <Room widthM={railWidthM} />
-      <Rail widthM={railWidthM} header={config.header} />
+      <Room m={m} />
+      <Rail
+        widthM={railWidthM}
+        header={config.header}
+        railY={m.railY}
+        attachXs={attachXs}
+        fabricTopY={topY}
+      />
 
       <Suspense fallback={null}>
-        {(config.side === "left" || config.side === "both") && (
-          <CurtainPanel side="left" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={leftXOffset} />
+        {showLeft && (
+          <CurtainPanel
+            side="left"
+            widthM={panelWidthM}
+            heightM={heightM}
+            config={config}
+            fabric={fabric}
+            topY={topY}
+            xOffset={leftXOffset}
+            zOffset={isBoth ? 0.012 : 0}
+          />
         )}
-        {(config.side === "right" || config.side === "both") && (
-          <CurtainPanel side="right" widthM={panelWidthM} heightM={heightM} config={config} fabric={fabric} railWidthM={railWidthM} xOffset={rightXOffset} />
+        {showRight && (
+          <CurtainPanel
+            side="right"
+            widthM={panelWidthM}
+            heightM={heightM}
+            config={config}
+            fabric={fabric}
+            topY={topY}
+            xOffset={rightXOffset}
+            zOffset={isBoth ? -0.012 : 0}
+          />
         )}
       </Suspense>
 
       <ContactShadows
-        position={[0, 0.001, 0.2]}
-        opacity={0.4}
-        scale={5}
-        blur={1.5}
-        far={1.5}
-        resolution={256}
+        position={[0, 0.002, 0.1]}
+        opacity={0.5}
+        scale={Math.max(railWidthM + 2.5, 5)}
+        blur={2.2}
+        far={0.9}
+        resolution={512}
       />
 
-      <OrbitControls
-        enabled={!controlsLocked}
-        enablePan={false}
-        enableZoom={!controlsLocked}
-        enableRotate={!controlsLocked}
-        minDistance={1.5}
-        maxDistance={6}
-        minPolarAngle={Math.PI / 3.2}
-        maxPolarAngle={Math.PI / 2.05}
-        target={[0, WIN_BOTTOM_Y + WIN_H / 2, 0]}
-        onChange={(e) => {
-          const cam = e?.target.object;
-          if (!cam) return;
-        }}
-      />
     </Canvas>
   );
 }

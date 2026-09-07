@@ -204,8 +204,11 @@ export function defaultCurtainConfig(): CurtainConfig {
   return {
     name: "",
     side: "both",
-    width: 100,
-    height: 100,
+    // A 150 x 200 cm window — the standard living-room opening these curtains
+    // are made for. The scene derives sill, rail and room from these two
+    // numbers, so a 100 x 100 default rendered a porthole in a full-height room.
+    width: 150,
+    height: 200,
     header: "triple-pinch",
     reserve: "high",
     lining: "none",
