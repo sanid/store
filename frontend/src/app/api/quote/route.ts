@@ -65,9 +65,21 @@ export async function POST(request: NextRequest) {
         schema: ANALYSIS_SCHEMA,
         schemaName: ANALYSIS_SCHEMA_NAME,
         schemaDescription: ANALYSIS_SCHEMA_DESCRIPTION,
+        // The outline drawing is a few hundred tokens of path data on top of
+        // the assessment itself — the default budget is not enough for both.
+        maxTokens: 8000,
       });
       estimate = normalizeEstimate(result.data, input).estimate;
       source = "ai";
+      // The static prefix (rules + catalog + schema) is cached; only the photos
+      // are ever billed in full. A cacheRead of 0 on back-to-back requests means
+      // something started varying in that prefix.
+      const u = result.usage;
+      if (u) {
+        console.info(
+          `[api/quote] ${provider.id}/${provider.model} in=${u.inputTokens ?? 0} out=${u.outputTokens ?? 0} cacheWrite=${u.cacheWriteTokens ?? 0} cacheRead=${u.cacheReadTokens ?? 0}`,
+        );
+      }
     } catch (err) {
       // A failed analysis must not fail the whole calculator — fall back to the
       // catalog baseline and tell the customer the estimate is rougher.

@@ -4,37 +4,52 @@ import { useCallback, useMemo, useState } from "react";
 import { getFabric } from "@/lib/curtains";
 import {
   CONDITIONS,
-  DIFFICULTY_LABEL,
   EXTRAS,
   LEATHER_GRADES,
   OBJECT_TYPES,
   SERVICES,
-  getObjectType,
 } from "@/lib/quote/catalog";
 import type { ConditionId, ExtraId, ObjectTypeId, ServiceId } from "@/lib/quote/catalog";
-import {
-  UPHOLSTERY_FABRICS,
-  priceQuote,
-} from "@/lib/quote/pricing";
+import { scoreInput } from "@/lib/quote/estimate";
+import { UPHOLSTERY_FABRICS, priceQuote } from "@/lib/quote/pricing";
 import type { QuoteResponse, QuoteSelection } from "@/lib/quote/types";
 import { formatPrice } from "@/lib/utils";
+import BuildProgress from "./BuildProgress";
 import ObjectSilhouette from "./ObjectSilhouette";
 import PhotoUpload from "./PhotoUpload";
+import PieceStage from "./PieceStage";
 import SubmitDialog from "./SubmitDialog";
+import { useReconstruction } from "./useReconstruction";
+import type { ReconstructionState } from "./useReconstruction";
 import type { UploadedPhoto } from "./PhotoUpload";
 
 const MAX_DETAIL_PHOTOS = 5;
 const MAX_OVERVIEW_PHOTOS = 3;
 
-type Step = "input" | "analyzing" | "result";
+/**
+ * There is no separate "result" step: the result *is* what we render once the
+ * analysis is in and the 3D reconstruction is no longer worth waiting for.
+ */
+type Step = "input" | "working";
 
-export default function QuoteCalculator() {
+export interface QuoteCalculatorProps {
+  /** Preselection handed over from the teaser on the home page. */
+  initialService?: ServiceId;
+  initialObjectType?: ObjectTypeId;
+}
+
+export default function QuoteCalculator({
+  initialService = "reupholster",
+  initialObjectType = "chair",
+}: QuoteCalculatorProps) {
   const [step, setStep] = useState<Step>("input");
   const [error, setError] = useState<string | null>(null);
+  /** Set when the customer would rather see the price than wait for the mesh. */
+  const [skipWait, setSkipWait] = useState(false);
 
   // --- form state ---------------------------------------------------------
-  const [service, setService] = useState<ServiceId>("reupholster");
-  const [objectType, setObjectType] = useState<ObjectTypeId>("chair");
+  const [service, setService] = useState<ServiceId>(initialService);
+  const [objectType, setObjectType] = useState<ObjectTypeId>(initialObjectType);
   const [quantity, setQuantity] = useState(1);
   const [description, setDescription] = useState("");
   const [width, setWidth] = useState("");
@@ -46,6 +61,8 @@ export default function QuoteCalculator() {
   // --- result state -------------------------------------------------------
   const [result, setResult] = useState<QuoteResponse | null>(null);
   const [selection, setSelection] = useState<QuoteSelection | null>(null);
+  /** Runs alongside the analysis — see `useReconstruction`. */
+  const reconstruction = useReconstruction();
 
   const breakdown = useMemo(() => {
     if (!result || !selection) return null;
@@ -57,9 +74,40 @@ export default function QuoteCalculator() {
     [overviewPhotos, detailPhotos],
   );
 
+  const dimensions = useMemo(
+    () => ({
+      width: width ? Number(width) : undefined,
+      depth: depth ? Number(depth) : undefined,
+      height: height ? Number(height) : undefined,
+    }),
+    [width, depth, height],
+  );
+
+  // Same score the server uses, so the meter promises exactly what it delivers.
+  const inputQuality = useMemo(
+    () =>
+      scoreInput({
+        service,
+        objectType,
+        quantity,
+        description,
+        dimensions,
+        photos: allPhotos.map((p) => p.dataUrl),
+      }),
+    [service, objectType, quantity, description, dimensions, allPhotos],
+  );
+
   const submit = useCallback(async () => {
     setError(null);
-    setStep("analyzing");
+    setSkipWait(false);
+    setStep("working");
+
+    // The 3D reconstruction starts first and runs in parallel: it is the slower
+    // of the two, and the customer waits for one thing, not two in sequence.
+    const best = bestPhoto(overviewPhotos, detailPhotos);
+    if (best) void reconstruction.start(best.dataUrl, objectType);
+    else reconstruction.reset();
+
     try {
       const res = await fetch("/api/quote", {
         method: "POST",
@@ -69,11 +117,7 @@ export default function QuoteCalculator() {
           objectType,
           quantity,
           description,
-          dimensions: {
-            width: width ? Number(width) : undefined,
-            depth: depth ? Number(depth) : undefined,
-            height: height ? Number(height) : undefined,
-          },
+          dimensions,
           photos: allPhotos.map((p) => p.dataUrl),
         }),
       });
@@ -91,12 +135,31 @@ export default function QuoteCalculator() {
       const quote = data as QuoteResponse;
       setResult(quote);
       setSelection(quote.selection);
-      setStep("result");
+      // Moving on is left to the effect below: if the 3D model is still being
+      // built, the customer keeps watching progress instead of seeing the piece
+      // pop in a moment after the price.
     } catch {
       setError("Verbindung zum Server fehlgeschlagen. Bitte versuchen Sie es erneut.");
       setStep("input");
     }
-  }, [service, objectType, quantity, description, width, depth, height, allPhotos]);
+  }, [
+    service,
+    objectType,
+    quantity,
+    description,
+    dimensions,
+    allPhotos,
+    overviewPhotos,
+    detailPhotos,
+    reconstruction,
+  ]);
+
+  // Both tracks have to land — or the 3D one has to be out of the running —
+  // before the result is worth showing.
+  const modelPending =
+    reconstruction.state.phase !== "off" &&
+    reconstruction.state.phase !== "done" &&
+    reconstruction.state.phase !== "failed";
 
   const update = useCallback(<K extends keyof QuoteSelection>(key: K, value: QuoteSelection[K]) => {
     setSelection((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -113,51 +176,56 @@ export default function QuoteCalculator() {
     });
   }, []);
 
-  if (step === "result" && result && selection && breakdown) {
+  const showResult =
+    step === "working" && result && selection && breakdown && (skipWait || !modelPending);
+
+  if (showResult && result && selection && breakdown) {
     return (
       <ResultView
         result={result}
         selection={selection}
         breakdown={breakdown}
         photos={allPhotos}
-        dimensions={{
-          width: width ? Number(width) : undefined,
-          depth: depth ? Number(depth) : undefined,
-          height: height ? Number(height) : undefined,
-        }}
+        dimensions={dimensions}
+        reconstruction={reconstruction.state}
         onUpdate={update}
         onToggleExtra={toggleExtra}
         onRestart={() => {
           setResult(null);
           setSelection(null);
+          reconstruction.reset();
+          setSkipWait(false);
           setStep("input");
         }}
       />
     );
   }
 
-  const objectDef = getObjectType(objectType);
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:py-16">
-      <header className="mb-10">
+    <div className="mx-auto max-w-3xl px-4 pb-28 pt-8 sm:px-6 lg:pb-16 lg:pt-14">
+      <header className="mb-8">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-600">
           KI-Schnellkalkulator
         </p>
-        <h1 className="mt-2 text-3xl font-semibold text-stone-900 sm:text-4xl">
+        <h1 className="mt-2 font-serif text-3xl font-light tracking-tight text-stone-900 sm:text-4xl">
           Richtpreis in zwei Minuten
         </h1>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-stone-600">
-          Fotos hochladen, Objekt beschreiben — die Analyse schätzt Materialbedarf und
-          Arbeitsaufwand. Danach wählen Sie Stoff, Leder und Zusatzarbeiten und sehen sofort, wie
-          sich der Richtpreis verändert.
+          Fotos hochladen, kurz beschreiben — Sie bekommen sofort einen Preisrahmen und können
+          Stoff, Leder und Zusatzarbeiten daran ausprobieren.
         </p>
       </header>
 
-      {step === "analyzing" ? (
-        <AnalyzingPanel photoCount={allPhotos.length} />
+      {step === "working" ? (
+        <BuildProgress
+          photoCount={allPhotos.length}
+          assessmentDone={result !== null}
+          modelPhase={reconstruction.state.phase}
+          queuePosition={reconstruction.state.queuePosition}
+          onSkip={result !== null ? () => setSkipWait(true) : undefined}
+        />
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-5">
           <Card step={1} title="Was sollen wir machen?">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {SERVICES.map((s) => (
@@ -165,10 +233,11 @@ export default function QuoteCalculator() {
                   key={s.id}
                   type="button"
                   onClick={() => setService(s.id)}
+                  aria-pressed={service === s.id}
                   className={`cursor-pointer rounded-xl border px-3 py-2.5 text-left transition ${
                     service === s.id
-                      ? "border-orange-500 bg-orange-50"
-                      : "border-stone-200 hover:border-stone-300"
+                      ? "border-orange-500 bg-orange-50 ring-1 ring-orange-200"
+                      : "border-stone-200 hover:border-stone-400"
                   }`}
                 >
                   <span className="block text-sm font-medium text-stone-900">{s.label}</span>
@@ -181,55 +250,52 @@ export default function QuoteCalculator() {
           </Card>
 
           <Card step={2} title="Um welches Objekt geht es?">
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {OBJECT_TYPES.map((t) => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => setObjectType(t.id)}
-                  className={`cursor-pointer rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
+                  aria-pressed={objectType === t.id}
+                  className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border px-2 py-2.5 transition ${
                     objectType === t.id
-                      ? "bg-orange-50 text-orange-700 ring-1 ring-orange-300"
-                      : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+                      ? "border-orange-500 bg-orange-50 ring-1 ring-orange-200"
+                      : "border-stone-200 hover:border-stone-400"
                   }`}
                 >
-                  {t.label}
+                  <ObjectSilhouette
+                    objectType={t.id}
+                    color={objectType === t.id ? "#f59e0b" : "#d6d3d1"}
+                    frameColor={objectType === t.id ? "#b45309" : "#a8a29e"}
+                    className="h-9 w-full"
+                  />
+                  <span
+                    className={`text-center text-[11px] font-medium leading-tight ${
+                      objectType === t.id ? "text-orange-800" : "text-stone-600"
+                    }`}
+                  >
+                    {t.label}
+                  </span>
                 </button>
               ))}
             </div>
 
-            <div className="mt-5 flex flex-wrap items-end gap-5">
+            <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
               <label className="block">
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  Anzahl Stücke
-                </span>
-                <div className="flex items-center rounded-full bg-stone-100">
-                  <button
-                    type="button"
-                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    className="cursor-pointer px-3.5 py-2 text-stone-500 hover:text-stone-900"
-                    aria-label="Weniger"
-                  >
-                    −
-                  </button>
-                  <span className="min-w-[2.5rem] text-center text-sm font-semibold tabular-nums text-stone-800">
-                    {quantity}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setQuantity((q) => Math.min(40, q + 1))}
-                    className="cursor-pointer px-3.5 py-2 text-stone-500 hover:text-stone-900"
-                    aria-label="Mehr"
-                  >
-                    +
-                  </button>
-                </div>
+                <FieldLabel>Anzahl Stücke</FieldLabel>
+                <Stepper
+                  value={quantity}
+                  onChange={(v) => setQuantity(Math.min(40, Math.max(1, v)))}
+                />
               </label>
 
               <div>
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  Maße in cm <span className="font-normal normal-case tracking-normal">(optional)</span>
-                </span>
+                <FieldLabel>
+                  Maße in cm{" "}
+                  <span className="font-normal normal-case tracking-normal text-orange-600">
+                    macht den Preis genauer
+                  </span>
+                </FieldLabel>
                 <div className="flex gap-2">
                   <DimInput label="Breite" value={width} onChange={setWidth} />
                   <DimInput label="Tiefe" value={depth} onChange={setDepth} />
@@ -237,15 +303,10 @@ export default function QuoteCalculator() {
                 </div>
               </div>
             </div>
-
-            <p className="mt-3 text-[11px] text-stone-400">
-              Erfahrungswert für {objectDef.label.toLowerCase()}: ca. {objectDef.fabric.base} lfm
-              Stoff und {objectDef.hours.base} Std. pro Stück bei vollem Neubezug.
-            </p>
           </Card>
 
-          <Card step={3} title="Fotos hochladen">
-            <div className="grid gap-6 sm:grid-cols-2">
+          <Card step={3} title="Fotos hochladen" hint="Je schärfer, desto enger der Preisrahmen">
+            <div className="grid gap-5 sm:grid-cols-2">
               <PhotoUpload
                 photos={overviewPhotos}
                 onChange={setOverviewPhotos}
@@ -261,22 +322,27 @@ export default function QuoteCalculator() {
                 hint="Möglichst nah und scharf auf Nähte, Kanten und beschädigte Stellen."
               />
             </div>
-            <p className="mt-4 rounded-xl bg-stone-50 px-3.5 py-2.5 text-[11px] leading-relaxed text-stone-500">
-              Ohne Fotos rechnen wir nur mit Erfahrungswerten — die Schätzung wird dann deutlich
-              ungenauer. Die Bilder werden ausschließlich für diese Kalkulation verarbeitet.
+            <p className="mt-3 text-[11px] leading-relaxed text-stone-500">
+              Die Bilder werden ausschließlich für diese Kalkulation verarbeitet.
             </p>
           </Card>
 
-          <Card step={4} title="Beschreibung">
+          <Card step={4} title="Beschreibung" hint="optional">
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
-              rows={4}
+              rows={3}
               placeholder="Was ist das für ein Stück, was stört Sie daran, gibt es Besonderheiten? Z. B. „Sessel aus den 60ern, Sitzfläche durchgesessen, Holzgestell soll bleiben.“"
               className="w-full resize-y rounded-xl border border-stone-200 px-3.5 py-3 text-sm text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-400"
             />
-            <p className="mt-1 text-right text-[11px] text-stone-400">{description.length}/2000</p>
           </Card>
+
+          <QualityMeter
+            quality={inputQuality}
+            photos={allPhotos.length}
+            hasWidth={Boolean(dimensions.width)}
+            hasText={description.trim().length >= 40}
+          />
 
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -284,20 +350,96 @@ export default function QuoteCalculator() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => void submit()}
-            className="w-full cursor-pointer rounded-xl bg-orange-500 px-6 py-4 text-sm font-semibold text-white transition hover:bg-orange-600"
-          >
-            Richtpreis berechnen
-          </button>
+          <div className="hidden lg:block">
+            <SubmitButton onClick={() => void submit()} />
+            <Disclaimer />
+          </div>
 
-          <p className="text-center text-[11px] leading-relaxed text-stone-400">
-            Das Ergebnis ist ein unverbindlicher Richtwert, kein Angebot. Der verbindliche Preis
-            steht erst nach Sichtung des Objekts fest.
-          </p>
+          {/* Mobile: the action stays reachable while scrolling the form. */}
+          <div className="fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
+            <SubmitButton onClick={() => void submit()} />
+          </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SubmitButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full cursor-pointer rounded-xl bg-orange-500 px-6 py-4 text-sm font-semibold text-white transition hover:bg-orange-600"
+    >
+      Richtpreis berechnen
+    </button>
+  );
+}
+
+function Disclaimer() {
+  return (
+    <p className="mt-3 text-center text-[11px] leading-relaxed text-stone-400">
+      Unverbindlicher Richtwert, kein Angebot. Der verbindliche Preis steht nach Sichtung des
+      Objekts fest.
+    </p>
+  );
+}
+
+/**
+ * Turns "wie genau wird das?" into something the customer can act on. The score
+ * is the same one the analysis uses, so following the hint really does tighten
+ * the price band they get.
+ */
+function QualityMeter({
+  quality,
+  photos,
+  hasWidth,
+  hasText,
+}: {
+  quality: number;
+  photos: number;
+  hasWidth: boolean;
+  hasText: boolean;
+}) {
+  const pct = Math.round(quality * 100);
+  const level = quality >= 0.75 ? "Hoch" : quality >= 0.45 ? "Mittel" : "Niedrig";
+  const tone =
+    quality >= 0.75 ? "bg-emerald-500" : quality >= 0.45 ? "bg-amber-500" : "bg-stone-400";
+
+  const next =
+    photos < 2
+      ? "Zwei bis drei Fotos aus verschiedenen Winkeln hochladen"
+      : !hasWidth
+        ? "Breite in cm ergänzen"
+        : photos < 4
+          ? "Eine Detailaufnahme von Naht oder Schadstelle ergänzen"
+          : !hasText
+            ? "Kurz beschreiben, was gemacht werden soll"
+            : null;
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3.5">
+      <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
+        <span>Genauigkeit Ihrer Angaben</span>
+        <span className="text-stone-700">{level}</span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-200">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${tone}`}
+          style={{ width: `${Math.max(5, pct)}%` }}
+        />
+      </div>
+      <p className="mt-2 text-[12px] leading-snug text-stone-600">
+        {next ? (
+          <>
+            <span className="font-medium text-stone-800">Nächster Schritt:</span> {next} — das macht
+            den Preisrahmen enger.
+          </>
+        ) : (
+          "Sehr gute Grundlage — der Preisrahmen wird entsprechend eng."
+        )}
+      </p>
     </div>
   );
 }
@@ -312,6 +454,7 @@ function ResultView({
   breakdown,
   photos,
   dimensions,
+  reconstruction,
   onUpdate,
   onToggleExtra,
   onRestart,
@@ -321,12 +464,14 @@ function ResultView({
   breakdown: NonNullable<ReturnType<typeof priceQuote>>;
   photos: UploadedPhoto[];
   dimensions?: { width?: number; depth?: number; height?: number };
+  reconstruction: ReconstructionState;
   onUpdate: <K extends keyof QuoteSelection>(key: K, value: QuoteSelection[K]) => void;
   onToggleExtra: (id: ExtraId) => void;
   onRestart: () => void;
 }) {
   const { estimate } = result;
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [showSubmit, setShowSubmit] = useState(false);
 
   const fabric = getFabric(selection.fabricId);
@@ -334,50 +479,79 @@ function ResultView({
   const materialColor =
     selection.materialKind === "leather" ? (leather?.hex ?? "#6b4a35") : (fabric?.hex ?? "#c9a54a");
   const textureUrl = selection.materialKind === "fabric" ? fabric?.textureUrl : undefined;
+  const materialName =
+    selection.materialKind === "leather"
+      ? (leather?.label ?? "Leder")
+      : fabric
+        ? `${fabric.brand} ${fabric.collection} — ${fabric.colorName}`
+        : "Stoff";
 
-  const lowConfidence = estimate.confidence < 0.5;
+  // What each extra actually adds, priced the same way as everything else. Far
+  // more useful to a customer than the hours behind it.
+  const extraCosts = useMemo(() => {
+    const map = new Map<ExtraId, number>();
+    for (const extra of EXTRAS) {
+      const active = selection.extras.includes(extra.id);
+      const other = active
+        ? selection.extras.filter((x) => x !== extra.id)
+        : [...selection.extras, extra.id];
+      const diff = priceQuote(estimate, { ...selection, extras: other }).gross - breakdown.gross;
+      map.set(extra.id, active ? -diff : diff);
+    }
+    return map;
+  }, [estimate, selection, breakdown.gross]);
+
+  const lowConfidence = estimate.confidence < 0.45;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px]">
       {/* ---------------------------------------------------------------- */}
-      {/* Visualisation                                                    */}
+      {/* Drawing                                                          */}
       {/* ---------------------------------------------------------------- */}
       <div className="bg-gradient-to-br from-stone-100 via-stone-50 to-stone-100">
         <div className="lg:sticky lg:top-[57px] lg:h-[calc(100vh-57px)] lg:overflow-y-auto">
-          <div className="px-6 py-8">
-            <div className="mx-auto max-w-md">
-              <ObjectSilhouette
-                objectType={estimate.objectType}
-                color={materialColor}
-                textureUrl={textureUrl}
-                className="w-full"
+          {/* One column that actually uses the width it is given: the piece on
+              top, then the evidence it was built from side by side. */}
+          <div className="mx-auto w-full max-w-[860px] px-5 py-6 sm:px-7">
+            <PieceStage
+              reconstruction={reconstruction}
+              outline={estimate.outline}
+              objectType={estimate.objectType}
+              objectLabel={estimate.objectLabel}
+              materialName={materialName}
+              material={{
+                color: materialColor,
+                textureUrl,
+                kind: selection.materialKind,
+              }}
+            />
+
+            <div className="mt-6 grid gap-5 md:grid-cols-[minmax(0,1fr)_200px]">
+              <AnalysisCard
+                estimate={estimate}
+                meta={result.meta}
+                expanded={showDetails}
+                onToggle={() => setShowDetails((v) => !v)}
               />
-              <p className="mt-2 text-center text-[11px] text-stone-400">
-                Schematische Darstellung im gewählten Material — kein Abbild Ihres Stücks.
-              </p>
-            </div>
 
-            {photos.length > 0 && (
-              <div className="mx-auto mt-8 max-w-md">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
-                  Ihre Fotos
-                </p>
-                <div className="grid grid-cols-4 gap-2">
-                  {photos.map((p) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={p.id}
-                      src={p.dataUrl}
-                      alt={p.name}
-                      className="aspect-square w-full rounded-lg object-cover"
-                    />
-                  ))}
+              {photos.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-500">
+                    Ihre Fotos
+                  </p>
+                  <div className="grid grid-cols-4 gap-1.5 md:grid-cols-2">
+                    {photos.map((p) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={p.id}
+                        src={p.dataUrl}
+                        alt={p.name}
+                        className="aspect-square w-full rounded-lg object-cover opacity-90"
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-
-            <div className="mx-auto mt-8 max-w-md space-y-3">
-              <AnalysisCard estimate={estimate} meta={result.meta} />
+              )}
             </div>
           </div>
         </div>
@@ -386,7 +560,7 @@ function ResultView({
       {/* ---------------------------------------------------------------- */}
       {/* Configurator panel                                               */}
       {/* ---------------------------------------------------------------- */}
-      <aside className="border-stone-200 bg-white lg:border-l">
+      <aside className="border-stone-200 bg-white pb-24 lg:border-l lg:pb-0">
         <div className="px-6 py-6 lg:sticky lg:top-[57px] lg:max-h-[calc(100vh-57px)] lg:overflow-y-auto">
           <div className="mb-5">
             <div className="flex items-center gap-2">
@@ -399,29 +573,25 @@ function ResultView({
             </div>
             <h2 className="mt-1 text-lg font-semibold text-stone-900">{estimate.objectLabel}</h2>
 
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-orange-600">
-                {formatPrice(breakdown.low)}
-              </span>
-              <span className="text-lg text-stone-400">–</span>
-              <span className="text-2xl font-semibold text-stone-700">
-                {formatPrice(breakdown.high)}
-              </span>
-            </div>
-            <p className="mt-1 text-[11px] text-stone-400">
-              inkl. 19 % MwSt. · Mittelwert {formatPrice(breakdown.gross)} ·{" "}
-              {selection.quantity > 1
-                ? `${formatPrice(Math.round(breakdown.gross / selection.quantity))} pro Stück`
-                : "1 Stück"}
+            <p className="mt-3 text-4xl font-bold tracking-tight text-stone-900">
+              <span className="mr-1 text-xl font-medium text-stone-400">ca.</span>
+              {approx(breakdown.gross, 5)}
             </p>
-
-            <ConfidenceBar confidence={estimate.confidence} />
+            <p className="mt-1.5 text-[12px] text-stone-500">
+              Erfahrungsgemäß zwischen{" "}
+              <span className="font-medium text-stone-700">{approx(breakdown.low, 5)}</span> und{" "}
+              <span className="font-medium text-stone-700">{approx(breakdown.high, 5)}</span> · inkl.
+              MwSt.
+              {selection.quantity > 1 && (
+                <> · {approx(breakdown.gross / selection.quantity, 5)} pro Stück</>
+              )}
+            </p>
           </div>
 
           {lowConfidence && (
             <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] leading-relaxed text-amber-900">
-              Die Erkennung ist bei diesem Objekt unsicher — der angezeigte Preis ist nur eine grobe
-              Orientierung. Mit schärferen Fotos und Maßen wird die Schätzung deutlich genauer.
+              Für dieses Stück reichen die Angaben nur für eine grobe Orientierung. Mit schärferen
+              Fotos und den Maßen wird der Rahmen deutlich enger.
             </div>
           )}
 
@@ -432,6 +602,7 @@ function ResultView({
                   key={kind}
                   type="button"
                   onClick={() => onUpdate("materialKind", kind)}
+                  aria-pressed={selection.materialKind === kind}
                   className={`flex-1 cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition ${
                     selection.materialKind === kind
                       ? "bg-orange-50 text-orange-700 ring-1 ring-orange-300"
@@ -455,10 +626,11 @@ function ResultView({
                     key={g.id}
                     type="button"
                     onClick={() => onUpdate("leatherGradeId", g.id)}
+                    aria-pressed={selection.leatherGradeId === g.id}
                     className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                       selection.leatherGradeId === g.id
                         ? "border-orange-500 bg-orange-50"
-                        : "border-stone-200 hover:border-stone-300"
+                        : "border-stone-200 hover:border-stone-400"
                     }`}
                   >
                     <span
@@ -469,9 +641,11 @@ function ResultView({
                       <span className="block text-xs font-medium text-stone-900">{g.label}</span>
                       <span className="block truncate text-[11px] text-stone-500">{g.hint}</span>
                     </span>
-                    <span className="flex-shrink-0 text-[11px] tabular-nums text-stone-500">
-                      {formatPrice(g.pricePerSqm)}/m²
-                    </span>
+                    <PriceTier
+                      value={g.pricePerSqm}
+                      min={LEATHER_GRADES[0].pricePerSqm}
+                      max={LEATHER_GRADES[LEATHER_GRADES.length - 1].pricePerSqm}
+                    />
                   </button>
                 ))}
               </div>
@@ -483,13 +657,17 @@ function ResultView({
               {EXTRAS.map((extra) => {
                 const active = selection.extras.includes(extra.id);
                 const suggested = estimate.suggestedExtras.includes(extra.id);
+                const cost = extraCosts.get(extra.id) ?? 0;
                 return (
                   <button
                     key={extra.id}
                     type="button"
                     onClick={() => onToggleExtra(extra.id)}
+                    aria-pressed={active}
                     className={`flex w-full cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
-                      active ? "border-orange-500 bg-orange-50" : "border-stone-200 hover:border-stone-300"
+                      active
+                        ? "border-orange-500 bg-orange-50"
+                        : "border-stone-200 hover:border-stone-400"
                     }`}
                   >
                     <span
@@ -512,15 +690,9 @@ function ResultView({
                       <span className="block text-[11px] leading-snug text-stone-500">
                         {extra.hint}
                       </span>
-                      {active && (
-                        <span className="mt-0.5 block text-[10px] leading-snug text-stone-400">
-                          {suggested
-                            ? "Im geschätzten Aufwand bereits enthalten"
-                            : extra.hours
-                              ? `+ ${extra.hours.toLocaleString("de-DE")} Std. Mehrarbeit`
-                              : "Zusatzkosten ohne Mehrarbeit"}
-                        </span>
-                      )}
+                    </span>
+                    <span className="flex-shrink-0 pt-0.5 text-[11px] font-medium tabular-nums text-stone-500">
+                      {cost > 0 ? `+ ${approx(cost, 1)}` : "inklusive"}
                     </span>
                   </button>
                 );
@@ -535,6 +707,7 @@ function ResultView({
                   key={c.id}
                   type="button"
                   onClick={() => onUpdate("condition", c.id as ConditionId)}
+                  aria-pressed={selection.condition === c.id}
                   className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium transition ${
                     selection.condition === c.id
                       ? "bg-orange-50 text-orange-700 ring-1 ring-orange-300"
@@ -548,34 +721,10 @@ function ResultView({
           </Section>
 
           <Section label="Anzahl">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center rounded-full bg-stone-100">
-                <button
-                  type="button"
-                  onClick={() => onUpdate("quantity", Math.max(1, selection.quantity - 1))}
-                  className="cursor-pointer px-3.5 py-2 text-stone-500 hover:text-stone-900"
-                  aria-label="Weniger"
-                >
-                  −
-                </button>
-                <span className="min-w-[2.5rem] text-center text-sm font-semibold tabular-nums text-stone-800">
-                  {selection.quantity}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onUpdate("quantity", Math.min(40, selection.quantity + 1))}
-                  className="cursor-pointer px-3.5 py-2 text-stone-500 hover:text-stone-900"
-                  aria-label="Mehr"
-                >
-                  +
-                </button>
-              </div>
-              <span className="text-[11px] text-stone-400">
-                {breakdown.meta.fabricMeters.toLocaleString("de-DE", { maximumFractionDigits: 1 })} lfm
-                Material · {breakdown.meta.laborHours.toLocaleString("de-DE", { maximumFractionDigits: 1 })}{" "}
-                Std. Arbeit
-              </span>
-            </div>
+            <Stepper
+              value={selection.quantity}
+              onChange={(v) => onUpdate("quantity", Math.min(40, Math.max(1, v)))}
+            />
           </Section>
 
           {/* Breakdown ---------------------------------------------------- */}
@@ -586,7 +735,7 @@ function ResultView({
               className="flex w-full cursor-pointer items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 transition hover:text-stone-800"
               aria-expanded={showBreakdown}
             >
-              So kommt der Preis zustande
+              Was ist enthalten
               <span aria-hidden>{showBreakdown ? "−" : "+"}</span>
             </button>
 
@@ -605,39 +754,38 @@ function ResultView({
                     </span>
                   </div>
                 ))}
-                <div className="mt-2 border-t border-stone-100 pt-2 text-xs">
-                  <Row label="Netto" value={formatPrice(breakdown.net)} />
-                  <Row label="19 % MwSt." value={formatPrice(breakdown.vat)} />
-                  <Row label="Brutto" value={formatPrice(breakdown.gross)} strong />
+                <div className="mt-2 flex justify-between border-t border-stone-100 pt-2 text-xs font-semibold text-stone-900">
+                  <span>Gesamt inkl. 19 % MwSt.</span>
+                  <span className="tabular-nums">{formatPrice(breakdown.gross)}</span>
                 </div>
-                <p className="pt-1 text-[11px] leading-relaxed text-stone-400">
-                  Die angezeigte Spanne von ±
-                  {Math.round(breakdown.meta.spread * 100)} % ergibt sich aus der Sicherheit der
-                  Einschätzung.
-                </p>
               </div>
             )}
           </div>
 
+          <div className="hidden lg:block">
+            <PrimaryActions
+              onRequest={() => setShowSubmit(true)}
+              onRestart={onRestart}
+              quoteCode={result.quoteCode}
+            />
+          </div>
+        </div>
+
+        {/* Mobile action bar ------------------------------------------------ */}
+        <div className="fixed inset-x-0 bottom-0 z-20 flex items-center gap-3 border-t border-stone-200 bg-white/95 px-4 py-3 backdrop-blur lg:hidden">
+          <div className="min-w-0">
+            <p className="truncate text-[10px] uppercase tracking-[0.12em] text-stone-400">
+              Richtpreis
+            </p>
+            <p className="text-base font-bold text-stone-900">ca. {approx(breakdown.gross, 5)}</p>
+          </div>
           <button
             type="button"
             onClick={() => setShowSubmit(true)}
-            className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+            className="ml-auto flex-shrink-0 cursor-pointer rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-orange-600"
           >
-            Verbindliches Angebot anfragen
+            Angebot anfragen
           </button>
-
-          <button
-            type="button"
-            onClick={onRestart}
-            className="mt-2 w-full cursor-pointer rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-400"
-          >
-            Neue Kalkulation
-          </button>
-
-          <p className="mt-3 text-center text-[11px] leading-relaxed text-stone-400">
-            Unverbindlicher Richtwert. Notieren Sie sich {result.quoteCode} für Rückfragen.
-          </p>
         </div>
       </aside>
 
@@ -657,22 +805,67 @@ function ResultView({
   );
 }
 
+function PrimaryActions({
+  onRequest,
+  onRestart,
+  quoteCode,
+}: {
+  onRequest: () => void;
+  onRestart: () => void;
+  quoteCode: string;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onRequest}
+        className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-orange-600"
+      >
+        Verbindliches Angebot anfragen
+      </button>
+      <button
+        type="button"
+        onClick={onRestart}
+        className="mt-2 w-full cursor-pointer rounded-xl border border-stone-300 bg-white px-6 py-3 text-sm font-semibold text-stone-700 transition hover:border-stone-400"
+      >
+        Neue Kalkulation
+      </button>
+      <p className="mt-3 text-center text-[11px] leading-relaxed text-stone-400">
+        Unverbindlicher Richtwert. Notieren Sie sich {quoteCode} für Rückfragen.
+      </p>
+    </>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Small pieces                                                              */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * What was recognised, in the customer's language. Everything that only the
+ * workshop needs — hours, running metres, difficulty factors — stays out.
+ */
 function AnalysisCard({
   estimate,
   meta,
+  expanded,
+  onToggle,
 }: {
   estimate: QuoteResponse["estimate"];
   meta: QuoteResponse["meta"];
+  expanded: boolean;
+  onToggle: () => void;
 }) {
+  const hasDetails =
+    estimate.difficultyReasons.length > 0 ||
+    estimate.riskFlags.length > 0 ||
+    estimate.assumptions.length > 0;
+
   return (
     <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-stone-200">
       <div className="mb-3 flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
-          Einschätzung
+          Das haben wir erkannt
         </span>
         <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] text-stone-500">
           {meta.source === "ai" ? "Bildanalyse" : "Erfahrungswerte"}
@@ -687,25 +880,37 @@ function AnalysisCard({
         </p>
       )}
 
-      <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-stone-100 pt-4">
-        <Stat label="Material" value={`${fmt(estimate.fabricMeters)} lfm`} />
-        <Stat label="Arbeitszeit" value={`${fmt(estimate.laborHours)} Std.`} />
-        <Stat label="Schwierigkeit" value={`${estimate.difficulty}/5`} hint={DIFFICULTY_LABEL[estimate.difficulty]} />
-      </dl>
-
-      {estimate.difficultyReasons.length > 0 && (
-        <BulletList title="Was den Aufwand treibt" items={estimate.difficultyReasons} />
-      )}
       {estimate.riskFlags.length > 0 && (
-        <BulletList title="Mögliche Zusatzkosten" items={estimate.riskFlags} accent />
+        <BulletList title="Kann teurer werden, wenn" items={estimate.riskFlags} accent />
       )}
-      {estimate.assumptions.length > 0 && (
-        <BulletList title="Annahmen" items={estimate.assumptions} muted />
+
+      {hasDetails && (
+        <>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className="mt-4 cursor-pointer text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500 transition hover:text-stone-800"
+          >
+            {expanded ? "Details ausblenden" : "Details zur Einschätzung"}
+          </button>
+          {expanded && (
+            <>
+              {estimate.difficultyReasons.length > 0 && (
+                <BulletList title="Was den Aufwand treibt" items={estimate.difficultyReasons} />
+              )}
+              {estimate.assumptions.length > 0 && (
+                <BulletList title="Angenommen haben wir" items={estimate.assumptions} muted />
+              )}
+            </>
+          )}
+        </>
       )}
+
       {estimate.followUpQuestions.length > 0 && (
         <div className="mt-4 rounded-xl bg-stone-50 px-3.5 py-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
-            Das würde die Schätzung schärfen
+            Das würde den Preis noch genauer machen
           </p>
           <ul className="mt-1.5 space-y-1">
             {estimate.followUpQuestions.map((q, i) => (
@@ -753,29 +958,18 @@ function BulletList({
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/** Relative price of a material, without publishing what we pay per metre. */
+function PriceTier({ value, min, max }: { value: number; min: number; max: number }) {
+  const span = Math.max(1, max - min);
+  const level = value >= min + span * 0.66 ? 3 : value >= min + span * 0.33 ? 2 : 1;
   return (
-    <div>
-      <dt className="text-[10px] uppercase tracking-[0.1em] text-stone-400">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold tabular-nums text-stone-800">{value}</dd>
-      {hint && <dd className="text-[10px] text-stone-400">{hint}</dd>}
-    </div>
-  );
-}
-
-function ConfidenceBar({ confidence }: { confidence: number }) {
-  const pct = Math.round(confidence * 100);
-  const tone = confidence >= 0.7 ? "bg-emerald-500" : confidence >= 0.5 ? "bg-amber-500" : "bg-red-400";
-  return (
-    <div className="mt-3">
-      <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.1em] text-stone-400">
-        <span>Sicherheit der Schätzung</span>
-        <span className="tabular-nums">{pct} %</span>
-      </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-stone-200">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(4, pct)}%` }} />
-      </div>
-    </div>
+    <span
+      className="flex-shrink-0 text-[11px] tracking-tight text-stone-400"
+      aria-label={`Preisklasse ${level} von 3`}
+    >
+      <span className="text-stone-700">{"€".repeat(level)}</span>
+      {"€".repeat(3 - level)}
+    </span>
   );
 }
 
@@ -787,6 +981,10 @@ function FabricGrid({
   onSelect: (id: string) => void;
 }) {
   const selected = getFabric(selectedId);
+  const prices = UPHOLSTERY_FABRICS.map((f) => f.pricePerMeter);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+
   return (
     <div>
       <div className="flex flex-wrap gap-2">
@@ -797,6 +995,7 @@ function FabricGrid({
             onClick={() => onSelect(f.id)}
             title={`${f.brand} ${f.collection} — ${f.colorName}`}
             aria-label={`${f.brand} ${f.collection}, ${f.colorName}`}
+            aria-pressed={selectedId === f.id}
             className={`h-9 w-9 cursor-pointer overflow-hidden rounded-full border transition ${
               selectedId === f.id
                 ? "ring-2 ring-orange-500 ring-offset-2"
@@ -812,41 +1011,36 @@ function FabricGrid({
         ))}
       </div>
       {selected && (
-        <p className="mt-2 text-[11px] text-stone-500">
-          {selected.brand} {selected.collection} — {selected.colorName} ·{" "}
-          <span className="tabular-nums">{formatPrice(selected.pricePerMeter)}/lfm</span> ·{" "}
-          {selected.webWidthCm} cm breit
+        <p className="mt-2 flex items-center gap-2 text-[11px] text-stone-500">
+          <span className="min-w-0 truncate">
+            {selected.brand} {selected.collection} — {selected.colorName}
+          </span>
+          <PriceTier value={selected.pricePerMeter} min={min} max={max} />
         </p>
       )}
     </div>
   );
 }
 
-function AnalyzingPanel({ photoCount }: { photoCount: number }) {
-  return (
-    <div className="rounded-2xl border border-stone-200 bg-white px-6 py-14 text-center">
-      <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-stone-200 border-t-orange-500" />
-      <p className="mt-5 text-sm font-medium text-stone-800">
-        {photoCount > 0
-          ? `${photoCount} Bild${photoCount === 1 ? "" : "er"} werden ausgewertet…`
-          : "Kalkulation läuft…"}
-      </p>
-      <p className="mt-1 text-[12px] text-stone-500">
-        Bauform, Nähte und Zustand werden mit den Werkstatt-Erfahrungswerten abgeglichen. Das dauert
-        meist 10–30 Sekunden.
-      </p>
-    </div>
-  );
-}
-
-function Card({ step, title, children }: { step: number; title: string; children: React.ReactNode }) {
+function Card({
+  step,
+  title,
+  hint,
+  children,
+}: {
+  step: number;
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6">
       <div className="mb-4 flex items-center gap-2.5">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-[11px] font-semibold text-white">
+        <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-stone-900 text-[11px] font-semibold text-white">
           {step}
         </span>
         <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
+        {hint && <span className="ml-auto text-[11px] text-stone-400">{hint}</span>}
       </div>
       {children}
     </section>
@@ -864,11 +1058,36 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`flex justify-between py-0.5 ${strong ? "font-semibold text-stone-900" : "text-stone-600"}`}>
-      <span>{label}</span>
-      <span className="tabular-nums">{value}</span>
+    <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
+      {children}
+    </span>
+  );
+}
+
+function Stepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div className="inline-flex items-center rounded-full bg-stone-100">
+      <button
+        type="button"
+        onClick={() => onChange(value - 1)}
+        className="cursor-pointer px-3.5 py-2 text-lg leading-none text-stone-500 transition hover:text-stone-900"
+        aria-label="Weniger"
+      >
+        −
+      </button>
+      <span className="min-w-[2.5rem] text-center text-sm font-semibold tabular-nums text-stone-800">
+        {value}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(value + 1)}
+        className="cursor-pointer px-3.5 py-2 text-lg leading-none text-stone-500 transition hover:text-stone-900"
+        aria-label="Mehr"
+      >
+        +
+      </button>
     </div>
   );
 }
@@ -899,6 +1118,23 @@ function DimInput({
   );
 }
 
-function fmt(v: number): string {
-  return v.toLocaleString("de-DE", { maximumFractionDigits: 1 });
+/**
+ * A price the customer should read as an estimate, not as an invoice: rounded
+ * to whole euros on a sensible step, with no cents to suggest precision the
+ * number does not have.
+ */
+function approx(cents: number, stepEuro: number): string {
+  const euro = Math.round(cents / 100 / stepEuro) * stepEuro;
+  return `${euro.toLocaleString("de-DE")} €`;
+}
+
+/**
+ * The photo the reconstruction gets. An overview shot shows the whole piece,
+ * which is what SAM needs; a close-up of a seam produces a lump.
+ */
+function bestPhoto(
+  overview: UploadedPhoto[],
+  detail: UploadedPhoto[],
+): UploadedPhoto | undefined {
+  return overview[0] ?? detail[0];
 }

@@ -43,6 +43,20 @@ export interface QuoteLine {
   amount: number;
 }
 
+/**
+ * Wie weit die angezeigte Spanne maximal aufgeht — als Anteil des Mittelpreises.
+ * Muss mit frontend/src/lib/quote/pricing.ts uebereinstimmen, sonst sieht der
+ * Kunde in der Vorschau eine andere Spanne als im Angebot.
+ */
+const MAX_BAND = { confident: 0.09, unsure: 0.16 };
+const MIN_BAND = 0.035;
+
+/** Aufwandsspanne der KI, auf die Gesamtmenge bezogen. */
+export interface QuoteEffortRanges {
+  fabricMeters?: { min: number; max: number };
+  laborHours?: { min: number; max: number };
+}
+
 export interface QuoteBreakdown {
   lines: QuoteLine[];
   net: number;
@@ -116,7 +130,11 @@ export { catalog as quoteCatalog };
  * selbst. Ein vom Mitarbeitenden freigegebenes Angebot setzt confidence auf 1
  * und bekommt dadurch die engste Spanne.
  */
-export function priceQuote(values: QuoteWorkingValues, confidence: number): QuoteBreakdown {
+export function priceQuote(
+  values: QuoteWorkingValues,
+  confidence: number,
+  ranges?: QuoteEffortRanges
+): QuoteBreakdown {
   const quantity = Math.max(1, Math.round(values.quantity || 1));
 
   const activeExtras = (values.extras || [])
@@ -142,13 +160,13 @@ export function priceQuote(values: QuoteWorkingValues, confidence: number): Quot
     materialPricePerUnit = grade.pricePerSqm;
     materialCost = Math.round(leatherSqm * grade.pricePerSqm);
     materialLabel = `Leder — ${grade.label}`;
-    materialDetail = `${fmtNum(leatherSqm)} m² × ${fmtEuro(grade.pricePerSqm)}/m²`;
+    materialDetail = 'Zuschnitt inkl. Verschnitt';
   } else {
     const perMeter = fabricPrice(values.fabricId);
     materialPricePerUnit = perMeter ?? 0;
     materialCost = Math.round(fabricMeters * materialPricePerUnit);
     materialLabel = `Stoff — ${values.fabricLabel || values.fabricId}`;
-    materialDetail = `${fmtNum(fabricMeters)} lfm × ${fmtEuro(materialPricePerUnit)}/lfm`;
+    materialDetail = 'Zuschnitt inkl. Verschnitt';
   }
 
   const consumables = Math.round(materialCost * RATES.consumablesRate);
@@ -183,7 +201,7 @@ export function priceQuote(values: QuoteWorkingValues, confidence: number): Quot
       return {
         id: `extra-${e.id}`,
         label: e.label,
-        detail: perOrder ? 'einmalig pro Auftrag' : `${quantity}× ${fmtEuro(fixed)}`,
+        detail: perOrder ? 'einmalig pro Auftrag' : `für ${quantity} Stück`,
         amount: fixed * (perOrder ? 1 : quantity),
       };
     });
@@ -199,7 +217,7 @@ export function priceQuote(values: QuoteWorkingValues, confidence: number): Quot
     {
       id: 'labor',
       label: 'Werkstattarbeit',
-      detail: `${fmtNum(laborHours)} Std. × ${fmtEuro(RATES.laborRatePerHour)}/Std.`,
+      detail: 'Abpolstern, Zuschnitt, Nähen, Beziehen',
       amount: laborCost,
     },
     ...extraLines,
@@ -223,24 +241,84 @@ export function priceQuote(values: QuoteWorkingValues, confidence: number): Quot
   const vat = Math.round(net * RATES.vatRate);
   const gross = net + vat;
 
-  const conf = clamp(confidence, 0, 1);
-  const spread = clamp(0.1 + (1 - conf) * 0.45, 0.1, 0.55);
+  // Die Spanne wird nicht geraten, sondern gerechnet: der Auftrag wird am
+  // unteren und oberen Ende des plausiblen Aufwands noch einmal bepreist.
+  const band = priceBand({
+    confidence: clamp(confidence, 0, 1),
+    ranges,
+    gross,
+    fixedNet: net - materialCost - consumables - laborCost,
+    materialPerMeter: fabricMeters > 0 ? materialCost / fabricMeters : 0,
+    fabricMeters,
+    fabricFactor,
+    workHours: laborHours - extraHours,
+    hoursFactor: difficultyFactor * conditionFactor,
+    extraHours,
+  });
 
   return {
     lines,
     net,
     vat,
     gross,
-    low: roundTo(gross * (1 - spread * 0.6), 500),
-    high: roundTo(gross * (1 + spread), 500),
+    low: band.low,
+    high: band.high,
     meta: {
       fabricMeters,
       leatherSqm,
       laborHours,
       difficulty: clampInt(values.difficulty, 1, 5),
       materialPricePerUnit,
-      spread,
+      spread: band.spread,
     },
+  };
+}
+
+/**
+ * Spanne aus der Aufwandsunsicherheit. Fixkosten (Pauschale, Abholung) wandern
+ * nicht mit, und die Breite ist hart gedeckelt: eine Spanne, die alles abdeckt,
+ * sagt dem Kunden nichts.
+ */
+function priceBand(args: {
+  confidence: number;
+  ranges?: QuoteEffortRanges;
+  gross: number;
+  fixedNet: number;
+  materialPerMeter: number;
+  fabricMeters: number;
+  fabricFactor: number;
+  workHours: number;
+  hoursFactor: number;
+  extraHours: number;
+}): { low: number; high: number; spread: number } {
+  const { gross } = args;
+
+  const variant = (meters: number, hours: number): number => {
+    const material = Math.round(meters * args.materialPerMeter);
+    const consum = Math.round(material * RATES.consumablesRate);
+    const labor = Math.round((hours + args.extraHours) * RATES.laborRatePerHour);
+    const net = material + consum + labor + args.fixedNet;
+    return net + Math.round(net * RATES.vatRate);
+  };
+
+  // Ohne KI-Spanne (manuell gepflegte Werte) bleibt eine schmale Toleranz.
+  const fr = args.ranges?.fabricMeters;
+  const hr = args.ranges?.laborHours;
+  const metersLow = Math.min(args.fabricMeters, (fr ? fr.min : args.fabricMeters * 0.94) * args.fabricFactor);
+  const metersHigh = Math.max(args.fabricMeters, (fr ? fr.max : args.fabricMeters * 1.06) * args.fabricFactor);
+  const baseHours = args.hoursFactor > 0 ? args.workHours / args.hoursFactor : args.workHours;
+  const hoursLow = Math.min(args.workHours, (hr ? hr.min : baseHours * 0.94) * args.hoursFactor);
+  const hoursHigh = Math.max(args.workHours, (hr ? hr.max : baseHours * 1.06) * args.hoursFactor);
+
+  const cap = args.confidence >= 0.55 ? MAX_BAND.confident : MAX_BAND.unsure;
+  const low = clamp(variant(metersLow, hoursLow), gross * (1 - cap), gross * (1 - MIN_BAND));
+  const high = clamp(variant(metersHigh, hoursHigh), gross * (1 + MIN_BAND), gross * (1 + cap));
+
+  const step = gross >= 100000 ? 1000 : 500;
+  return {
+    low: roundTo(low, step),
+    high: roundTo(high, step),
+    spread: round2((high - low) / 2 / Math.max(1, gross)),
   };
 }
 
@@ -255,13 +333,4 @@ function round2(v: number): number {
 }
 function roundTo(v: number, step: number): number {
   return Math.round(v / step) * step;
-}
-function fmtNum(v: number): string {
-  return v.toLocaleString('de-DE', { maximumFractionDigits: 2 });
-}
-function fmtEuro(cents: number): string {
-  return `${(cents / 100).toLocaleString('de-DE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} €`;
 }

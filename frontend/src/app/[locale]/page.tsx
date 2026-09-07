@@ -1,6 +1,7 @@
 import { Link } from "@/i18n/routing";
 import { setRequestLocale } from "next-intl/server";
 import BestsellersCarousel from "@/components/BestsellersCarousel";
+import CalculatorTeaser from "@/components/quote/CalculatorTeaser";
 
 export default async function HomePage({
   params,
@@ -40,6 +41,13 @@ function HomeContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
               </svg>
             </Link>
+            <Link
+              href="/kalkulator"
+              className="inline-flex items-center gap-2 border border-stone-300 px-7 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-700 transition hover:border-stone-900 hover:text-stone-900"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-orange-500" aria-hidden />
+              Polster-Richtpreis berechnen
+            </Link>
             <a
               href="#kontakt"
               className="inline-flex items-center border border-stone-300 px-7 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-stone-700 transition hover:border-stone-900 hover:text-stone-900"
@@ -52,6 +60,9 @@ function HomeContent() {
 
       {/* Bestseller fabrics */}
       <BestsellersCarousel />
+
+      {/* Upholstery calculator — the fastest way into a conversation */}
+      <CalculatorTeaser />
 
       {/* Three-column manufacturer story */}
       <section className="border-t border-stone-200 bg-stone-50">

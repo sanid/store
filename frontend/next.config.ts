@@ -38,9 +38,11 @@ const nextConfig: NextConfig = {
     const imgSrc = isDev
       ? "img-src 'self' data: blob: http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://res.cloudinary.com"
       : "img-src 'self' data: blob: https://*.strapiapp.com https://*.up.railway.app https://res.cloudinary.com";
+    // `blob:` is required by three.js: glTF textures are embedded in the file,
+    // and the loader fetches them back out through a blob URL it created itself.
     const connectSrc = isDev
-      ? "connect-src 'self' http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com"
-      : "connect-src 'self' https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com";
+      ? "connect-src 'self' blob: http://localhost:1337 https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com"
+      : "connect-src 'self' blob: https://*.strapiapp.com https://*.up.railway.app https://api.stripe.com";
 
     return [
     {

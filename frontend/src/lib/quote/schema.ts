@@ -28,8 +28,12 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
     "quantity",
     "materialKind",
     "fabricMeters",
+    "fabricMetersMin",
+    "fabricMetersMax",
     "foamLiters",
     "laborHours",
+    "laborHoursMin",
+    "laborHoursMax",
     "difficulty",
     "difficultyReasons",
     "condition",
@@ -39,6 +43,7 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
     "assumptions",
     "riskFlags",
     "followUpQuestions",
+    "outline",
   ],
   properties: {
     objectType: {
@@ -71,6 +76,16 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
       description:
         "Benötigte Laufmeter bei 140 cm Warenbreite für die GESAMTE Menge, inkl. üblichem Verschnitt, ohne Musterrapport.",
     },
+    fabricMetersMin: {
+      type: "number",
+      description:
+        "Untere plausible Grenze des Stoffbedarfs. Eng halten: nur so weit unter fabricMeters, wie es realistisch ist — höchstens 15 % darunter.",
+    },
+    fabricMetersMax: {
+      type: "number",
+      description:
+        "Obere plausible Grenze des Stoffbedarfs. Höchstens 15 % über fabricMeters.",
+    },
     foamLiters: {
       type: "number",
       description: "Geschätzter Schaumstoffbedarf in Litern für die gesamte Menge. 0 falls nicht nötig.",
@@ -78,6 +93,16 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
     laborHours: {
       type: "number",
       description: "Reine Werkstattstunden für die GESAMTE Menge, ohne Zuschläge für Extras.",
+    },
+    laborHoursMin: {
+      type: "number",
+      description:
+        "Untere plausible Grenze der Arbeitszeit, höchstens 18 % unter laborHours. Nur so weit spreizen, wie die Bilder es wirklich offen lassen.",
+    },
+    laborHoursMax: {
+      type: "number",
+      description:
+        "Obere plausible Grenze der Arbeitszeit, höchstens 18 % über laborHours.",
     },
     difficulty: {
       type: "integer",
@@ -124,6 +149,38 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
       type: "array",
       items: { type: "string" },
       description: "Fragen auf Deutsch, deren Antwort die Schätzung deutlich schärfen würde. 0–3 Einträge.",
+    },
+    outline: {
+      type: "object",
+      additionalProperties: false,
+      required: ["parts"],
+      description:
+        "Umriss-Zeichnung des erkannten Objekts als SVG-Pfade in einem Koordinatensystem 0 0 200 140.",
+      properties: {
+        parts: {
+          type: "array",
+          description:
+            "8–24 Pfade, von hinten nach vorne gezeichnet. Nur reine Pfaddaten, kein SVG-Markup.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["role", "d"],
+            properties: {
+              role: {
+                type: "string",
+                enum: ["upholstery", "cushion", "frame", "leg", "seam", "detail"],
+                description:
+                  "upholstery/cushion = bezogene Flächen (bekommen das gewählte Material), frame/leg = Holz und Gestell, seam = Nähte und Kanten, detail = Knöpfe, Nieten, Zierlinien.",
+              },
+              d: {
+                type: "string",
+                description:
+                  "SVG-Pfaddaten, nur die Befehle M L H V C S Q T A Z und Zahlen. Geschlossene Flächen mit Z beenden.",
+              },
+            },
+          },
+        },
+      },
     },
   },
 };

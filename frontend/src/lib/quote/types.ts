@@ -33,20 +33,51 @@ export interface QuoteEstimate {
   materialKind: MaterialKind;
   /** Laufmeter bei 140 cm Warenbreite, für die gesamte Menge. */
   fabricMeters: number;
+  /** Band the analysis considers plausible for the fabric requirement. */
+  fabricMetersRange: EstimateRange;
   foamLiters: number;
   laborHours: number;
+  /** Band the analysis considers plausible for the workshop hours. */
+  laborHoursRange: EstimateRange;
   /** 1–5. */
   difficulty: number;
   difficultyReasons: string[];
   condition: ConditionId;
   /** Extras the analysis believes the job needs. Pre-selected in the UI. */
   suggestedExtras: ExtraId[];
-  /** 0–1. Drives how wide the displayed price range is. */
+  /** 0–1. Widens the displayed price range when the inputs were poor. */
   confidence: number;
+  /** 0–1. How good the customer's own input was (photos, measurements, text). */
+  inputQuality: number;
+  /** Vector outline of the recognised piece, when the analysis produced one. */
+  outline?: QuoteOutline;
   summary: string;
   assumptions: string[];
   riskFlags: string[];
   followUpQuestions: string[];
+}
+
+/** A plausible band the analysis gives for a quantity it cannot pin down exactly. */
+export interface EstimateRange {
+  min: number;
+  max: number;
+}
+
+/**
+ * Outline drawing the analysis returns for the recognised piece. Only path data
+ * — never raw SVG markup — so nothing from the model is ever injected into the
+ * DOM. Roles decide which paths follow the selected material.
+ */
+export type OutlinePartRole = "upholstery" | "cushion" | "frame" | "leg" | "seam" | "detail";
+
+export interface OutlinePart {
+  role: OutlinePartRole;
+  /** SVG path data in a 0 0 200 140 viewBox, validated character by character. */
+  d: string;
+}
+
+export interface QuoteOutline {
+  parts: OutlinePart[];
 }
 
 /** The choices the user makes in the configurator after the analysis. */
@@ -77,7 +108,7 @@ export interface QuoteBreakdown {
   /** Displayed range around `gross`, widened by low confidence. */
   low: number;
   high: number;
-  /** Derived figures the UI shows as "so kommt der Preis zustande". */
+  /** Internal figures — never rendered to the customer, used by the workshop. */
   meta: {
     fabricMeters: number;
     leatherSqm: number;

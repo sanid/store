@@ -35,7 +35,14 @@ export interface AiAnalysisResult {
   data: unknown;
   provider: AiProviderId;
   model: string;
-  usage?: { inputTokens?: number; outputTokens?: number };
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    /** Tokens written to the prompt cache on this call (billed at 1.25x). */
+    cacheWriteTokens?: number;
+    /** Tokens served from the prompt cache (billed at 0.1x). */
+    cacheReadTokens?: number;
+  };
 }
 
 export interface AiProvider {

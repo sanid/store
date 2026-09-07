@@ -42,10 +42,6 @@ function fmt(cents: number): string {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 }
 
-function num(v: number): string {
-  return v.toLocaleString('de-DE', { maximumFractionDigits: 2 });
-}
-
 /** Strapi richtext ist Markdown — fuers PDF reicht das Entfernen der Auszeichnung. */
 function plain(md?: string | null): string {
   if (!md) return '';
@@ -127,9 +123,8 @@ export function generateOfferPdf(offer: OfferInput): Promise<Buffer> {
       `Leistung: ${getService(v.service).label}`,
       `Anzahl: ${v.quantity}`,
       `Material: ${offer.fabricLabel || (v.materialKind === 'leather' ? 'Leder' : 'Stoff')}`,
-      `Materialbedarf: ${num(offer.breakdown.meta.fabricMeters)} lfm`,
-      `Arbeitszeit: ${num(offer.breakdown.meta.laborHours)} Std.`,
-      `Schwierigkeit: ${v.difficulty}/5 (${difficultyLabel(v.difficulty)})`,
+      // Kalkulationsinterna (Laufmeter, Stunden) gehoeren nicht ins Kundenangebot.
+      `Ausführung: ${difficultyLabel(v.difficulty)}`,
       `Zustand: ${getCondition(v.condition).label}`,
     ];
     doc.text(specs.join('  ·  '), left, y, { width: right - left });

@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { priceQuote, quoteCatalog, getObjectType } from '../services/quote-pricing';
-import type { QuoteWorkingValues } from '../services/quote-pricing';
+import type { QuoteEffortRanges, QuoteWorkingValues } from '../services/quote-pricing';
 import { generateOfferPdf } from '../services/offer-pdf';
 
 const UID = 'api::quote-request.quote-request';
@@ -43,7 +43,7 @@ export default factories.createCoreController(UID, ({ strapi }: any) => ({
     // Fotos in die Medienbibliothek, damit sie im Admin sichtbar sind.
     const photoIds = await uploadPhotos(strapi, body.photos, body.quoteCode);
 
-    const breakdown = priceQuote(values, confidence);
+    const breakdown = priceQuote(values, confidence, effortRanges(assessment));
 
     const entry = await strapi.documents(UID).create({
       data: {
@@ -97,7 +97,10 @@ export default factories.createCoreController(UID, ({ strapi }: any) => ({
     );
     // Ein geprueftes Angebot bekommt die enge Spanne: der Mensch hat draufgeschaut.
     const confidence = entry.status === 'new' ? Number(entry.aiConfidence ?? 0.35) : 1;
-    const breakdown = priceQuote(values, confidence);
+    // Nach einer Handkorrektur zaehlt die KI-Spanne nicht mehr: die Werte sind
+    // dann gesetzt, nicht geschaetzt.
+    const ranges = ctx.request.body?.workingValues ? undefined : effortRanges(entry.aiAssessment);
+    const breakdown = priceQuote(values, confidence, ranges);
 
     const updated = await strapi.documents(UID).update({
       documentId,
@@ -244,6 +247,20 @@ export default factories.createCoreController(UID, ({ strapi }: any) => ({
 }));
 
 /* ------------------------------------------------------------------ */
+
+/** Aufwandsspanne aus der gespeicherten KI-Einschaetzung, falls vorhanden. */
+function effortRanges(assessment: unknown): QuoteEffortRanges | undefined {
+  if (!isPlainObject(assessment)) return undefined;
+  const a = assessment as Record<string, any>;
+  const pick = (v: any) =>
+    isPlainObject(v) && Number.isFinite(Number(v.min)) && Number.isFinite(Number(v.max))
+      ? { min: Math.max(0, Number(v.min)), max: Math.max(0, Number(v.max)) }
+      : undefined;
+  const fabricMeters = pick(a.fabricMetersRange);
+  const laborHours = pick(a.laborHoursRange);
+  if (!fabricMeters && !laborHours) return undefined;
+  return { fabricMeters, laborHours };
+}
 
 function sanitizeWorkingValues(raw: unknown, assessment: unknown): QuoteWorkingValues {
   const r = isPlainObject(raw) ? raw : {};

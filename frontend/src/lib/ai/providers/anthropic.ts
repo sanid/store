@@ -60,7 +60,19 @@ export function createAnthropicProvider(): AiProvider {
           const response = await client.messages.create({
             model,
             max_tokens: request.maxTokens ?? 4000,
-            system: request.system,
+            // Everything up to and including the system prompt is byte-identical
+            // on every request — the workshop catalog, the rules, the schema.
+            // The breakpoint sits on the last system block, and because the
+            // render order is tools -> system -> messages it covers the tool
+            // schema as well. Only the photos and the customer's own text, which
+            // follow it, are ever charged at full price.
+            system: [
+              {
+                type: "text",
+                text: request.system,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
             ...thinkingConfigFor(model),
             tools: [
               {
@@ -99,6 +111,8 @@ export function createAnthropicProvider(): AiProvider {
             usage: {
               inputTokens: response.usage.input_tokens,
               outputTokens: response.usage.output_tokens,
+              cacheWriteTokens: response.usage.cache_creation_input_tokens ?? undefined,
+              cacheReadTokens: response.usage.cache_read_input_tokens ?? undefined,
             },
           };
         } catch (err) {
