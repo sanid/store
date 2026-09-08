@@ -4,7 +4,7 @@ import { OBJECT_TYPES, SERVICES } from "@/lib/quote/catalog";
 import type { ObjectTypeId, ServiceId } from "@/lib/quote/catalog";
 
 export const metadata = {
-  title: "KI-Schnellkalkulator – Unique Factory",
+  title: "Schnellkalkulator – Unique Factory",
   description:
     "Fotos hochladen und in zwei Minuten einen Richtpreis für Neubezug, Reparatur oder Sonderanfertigung erhalten — inklusive Materialvorschau am eigenen Stück.",
 };

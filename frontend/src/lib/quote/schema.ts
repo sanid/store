@@ -16,7 +16,8 @@ export const ANALYSIS_SCHEMA_NAME = "polster_analyse";
 
 export const ANALYSIS_SCHEMA_DESCRIPTION =
   "Erfasse die Werkstatt-Einschätzung für das abgebildete Objekt: Klassifikation, " +
-  "Materialbedarf, Arbeitsaufwand, Schwierigkeit und Unsicherheiten.";
+  "Stil und Epoche, Materialbedarf, Arbeitsaufwand, Schwierigkeit und Unsicherheiten " +
+  "sowie den geplanten Arbeitsablauf für den Kunden.";
 
 export const ANALYSIS_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -40,10 +41,12 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
     "suggestedExtras",
     "confidence",
     "summary",
+    "designStyle",
+    "era",
+    "processSteps",
     "assumptions",
     "riskFlags",
     "followUpQuestions",
-    "outline",
   ],
   properties: {
     objectType: {
@@ -74,7 +77,7 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
     fabricMeters: {
       type: "number",
       description:
-        "Benötigte Laufmeter bei 140 cm Warenbreite für die GESAMTE Menge, inkl. üblichem Verschnitt, ohne Musterrapport.",
+        "Benötigte Laufmeter bei 140 cm Warenbreite für die GESAMTE Menge, inkl. üblichem Verschnitt, ohne Musterrapport. Kundemaße haben Vorrang: leite den Bedarf aus Breite/Tiefe/Höhe ab, skaliert gegen die Referenzbreite des Objekttyps.",
     },
     fabricMetersMin: {
       type: "number",
@@ -134,6 +137,22 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
       type: "string",
       description: "1–2 Sätze auf Deutsch: was erkannt wurde und was gemacht werden müsste.",
     },
+    designStyle: {
+      type: "string",
+      description:
+        "Designrichtung des Stücks in ein bis drei Wörtern, z. B. 'Mid-Century', 'Bauhaus', 'Chesterfield'. Kein bekannter Stil: knappe Charakteristik statt Stilname.",
+    },
+    era: {
+      type: "string",
+      description:
+        "Zeiteinschätzung des Stücks, z. B. '1960er Jahre' oder 'Neuanfertigung'. Bei Unsicherheit mit 'wohl' formulieren.",
+    },
+    processSteps: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "3–6 kurze kundengerechte Arbeitsschritte für genau dieses Stück, vom Abnehmen des alten Bezugs bis zum Finish. Ohne Fachjargon.",
+    },
     assumptions: {
       type: "array",
       items: { type: "string" },
@@ -149,38 +168,6 @@ export const ANALYSIS_SCHEMA: Record<string, unknown> = {
       type: "array",
       items: { type: "string" },
       description: "Fragen auf Deutsch, deren Antwort die Schätzung deutlich schärfen würde. 0–3 Einträge.",
-    },
-    outline: {
-      type: "object",
-      additionalProperties: false,
-      required: ["parts"],
-      description:
-        "Umriss-Zeichnung des erkannten Objekts als SVG-Pfade in einem Koordinatensystem 0 0 200 140.",
-      properties: {
-        parts: {
-          type: "array",
-          description:
-            "8–24 Pfade, von hinten nach vorne gezeichnet. Nur reine Pfaddaten, kein SVG-Markup.",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["role", "d"],
-            properties: {
-              role: {
-                type: "string",
-                enum: ["upholstery", "cushion", "frame", "leg", "seam", "detail"],
-                description:
-                  "upholstery/cushion = bezogene Flächen (bekommen das gewählte Material), frame/leg = Holz und Gestell, seam = Nähte und Kanten, detail = Knöpfe, Nieten, Zierlinien.",
-              },
-              d: {
-                type: "string",
-                description:
-                  "SVG-Pfaddaten, nur die Befehle M L H V C S Q T A Z und Zahlen. Geschlossene Flächen mit Z beenden.",
-              },
-            },
-          },
-        },
-      },
     },
   },
 };

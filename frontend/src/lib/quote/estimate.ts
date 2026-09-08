@@ -129,6 +129,9 @@ export function normalizeEstimate(
     inputQuality,
     outline: sanitizeOutline(r.outline),
     summary: str(r.summary, "Einschätzung auf Basis der übermittelten Angaben.").slice(0, 600),
+    designStyle: optStr(r.designStyle, 60),
+    era: optStr(r.era, 60),
+    processSteps: strArray(r.processSteps).slice(0, 8),
     assumptions: [...strArray(r.assumptions).slice(0, 6), ...clamped],
     riskFlags: strArray(r.riskFlags).slice(0, 6),
     followUpQuestions: strArray(r.followUpQuestions).slice(0, 3),
@@ -184,6 +187,7 @@ export function heuristicEstimate(input: QuoteRequestInput): QuoteEstimate {
       "Diese Schätzung basiert nur auf Ihren Angaben, nicht auf einer Bildanalyse.",
       "Standardaufbau ohne Sonderformen angenommen.",
     ],
+    processSteps: [],
     riskFlags: [],
     followUpQuestions: [
       "Wie sind die genauen Maße des Objekts?",
@@ -309,29 +313,27 @@ function relDiff(a: number, b: number): number {
   return Math.abs(a - b) / scale;
 }
 
+/**
+ * Reference piece width the catalog baselines were written for, in cm. Shared
+ * with the system prompt, so the model scales fabric needs exactly the way
+ * `dimensionFactor` does.
+ */
+export const REFERENCE_WIDTH_CM: Record<ObjectTypeId, number> = {
+  chair: 45,
+  stool: 45,
+  armchair: 80,
+  bench: 140,
+  headboard: 140,
+  "sofa-2": 160,
+  "sofa-3": 210,
+  "corner-sofa": 280,
+  "cushion-set": 50,
+  window: 120,
+  other: 100,
+};
+
 function referenceWidth(id: ObjectTypeId): number {
-  switch (id) {
-    case "chair":
-    case "stool":
-      return 45;
-    case "armchair":
-      return 80;
-    case "bench":
-    case "headboard":
-      return 140;
-    case "sofa-2":
-      return 160;
-    case "sofa-3":
-      return 210;
-    case "corner-sofa":
-      return 280;
-    case "cushion-set":
-      return 50;
-    case "window":
-      return 120;
-    default:
-      return 100;
-  }
+  return REFERENCE_WIDTH_CM[id];
 }
 
 function clamp(v: number, min: number, max: number): number {
@@ -352,6 +354,12 @@ function num(v: unknown, fallback: number): number {
 
 function str(v: unknown, fallback: string): string {
   return typeof v === "string" && v.trim() ? v.trim() : fallback;
+}
+
+/** A string the model may leave empty — stays undefined instead of "". */
+function optStr(v: unknown, max: number): string | undefined {
+  const s = str(v, "");
+  return s ? s.slice(0, max) : undefined;
 }
 
 function strArray(v: unknown): string[] {

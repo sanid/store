@@ -65,9 +65,10 @@ export async function POST(request: NextRequest) {
         schema: ANALYSIS_SCHEMA,
         schemaName: ANALYSIS_SCHEMA_NAME,
         schemaDescription: ANALYSIS_SCHEMA_DESCRIPTION,
-        // The outline drawing is a few hundred tokens of path data on top of
-        // the assessment itself — the default budget is not enough for both.
-        maxTokens: 8000,
+        // The structured assessment — incl. the style/era/process texts the
+        // customer reads — needs more than the default budget, but it is all
+        // short text: far less than the outline drawing used to cost.
+        maxTokens: 4000,
       });
       estimate = normalizeEstimate(result.data, input).estimate;
       source = "ai";

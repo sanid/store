@@ -19,7 +19,7 @@ export interface ReconstructionState {
  *
  * Deliberately failure-tolerant: no fal key, a refused photo or a model that
  * cannot find the object all end in `failed`, and the calculator carries on
- * with the outline drawing instead.
+ * with the built-in schematic instead.
  */
 export function useReconstruction() {
   const [state, setState] = useState<ReconstructionState>({ phase: "off" });

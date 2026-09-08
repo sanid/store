@@ -25,7 +25,7 @@ interface Props {
 
 /**
  * The customer's piece, as good as we can show it: the reconstructed 3D model
- * when SAM managed one, the analysis' line drawing otherwise. Either way the
+ * when SAM managed one, the built-in schematic otherwise. Either way the
  * selected fabric or leather is on it.
  */
 export default function PieceStage({
@@ -76,9 +76,9 @@ export default function PieceStage({
         </p>
         <p className="mt-0.5 text-center text-[11px] text-stone-400">
           {reconstruction.phase === "failed"
-            ? "Für dieses Foto war kein 3D-Modell möglich — Zeichnung nach Ihren Angaben."
+            ? "Für dieses Foto war kein 3D-Modell möglich — Skizze nach Ihren Angaben."
             : reconstruction.phase === "off"
-              ? "Zeichnung nach Ihren Fotos — Material wechseln Sie rechts."
+              ? "Skizze des Stücks — Material wechseln Sie rechts."
               : "3D-Modell wird noch gebaut …"}
         </p>
       </div>
@@ -87,7 +87,7 @@ export default function PieceStage({
 
   return (
     <div>
-      <div className="overflow-hidden rounded-2xl ring-1 ring-stone-200">
+      <div className="relative overflow-hidden rounded-2xl ring-1 ring-stone-200">
         <ModelViewer
           modelUrl={modelUrl}
           material={material}
@@ -98,6 +98,10 @@ export default function PieceStage({
           showOriginal={showOriginal}
           className="h-[48vh] min-h-[300px] w-full lg:h-[56vh]"
         />
+        {/* Honesty up front: the mesh is an approximation, not a replica. */}
+        <span className="pointer-events-none absolute right-3 top-3 max-w-[85%] rounded-full bg-white/85 px-3 py-1.5 text-[11px] font-medium leading-snug text-stone-600 ring-1 ring-stone-200 backdrop-blur">
+          3D-Modell ist eine schnelle Approximation — natürlich keine 1:1-Darstellung des Objekts
+        </span>
       </div>
 
       <p className="mt-2.5 text-[12px] text-stone-500">

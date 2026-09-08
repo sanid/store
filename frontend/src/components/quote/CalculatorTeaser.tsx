@@ -28,7 +28,7 @@ export default function CalculatorTeaser() {
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1.15fr] lg:gap-16">
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-orange-400">
-              Neu · KI-Schnellkalkulator
+              Neu · Schnellkalkulator
             </span>
             <h2 className="mt-5 font-serif text-3xl font-light leading-[1.2] tracking-tight text-white sm:text-4xl">
               Was kostet es, Ihr Möbelstück

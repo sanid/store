@@ -15,10 +15,12 @@ import { UPHOLSTERY_FABRICS, priceQuote } from "@/lib/quote/pricing";
 import type { QuoteResponse, QuoteSelection } from "@/lib/quote/types";
 import { formatPrice } from "@/lib/utils";
 import BuildProgress from "./BuildProgress";
+import MaterialPicker from "./MaterialPicker";
 import ObjectSilhouette from "./ObjectSilhouette";
 import PhotoUpload from "./PhotoUpload";
 import PieceStage from "./PieceStage";
 import SubmitDialog from "./SubmitDialog";
+import Swatch from "./Swatch";
 import { useReconstruction } from "./useReconstruction";
 import type { ReconstructionState } from "./useReconstruction";
 import type { UploadedPhoto } from "./PhotoUpload";
@@ -205,7 +207,7 @@ export default function QuoteCalculator({
     <div className="mx-auto max-w-3xl px-4 pb-28 pt-8 sm:px-6 lg:pb-16 lg:pt-14">
       <header className="mb-8">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-600">
-          KI-Schnellkalkulator
+          Schnellkalkulator
         </p>
         <h1 className="mt-2 font-serif text-3xl font-light tracking-tight text-stone-900 sm:text-4xl">
           Richtpreis in zwei Minuten
@@ -280,7 +282,10 @@ export default function QuoteCalculator({
               ))}
             </div>
 
-            <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
+          </Card>
+
+          <Card step={3} title="Anzahl & Maße">
+            <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-start">
               <label className="block">
                 <FieldLabel>Anzahl Stücke</FieldLabel>
                 <Stepper
@@ -289,7 +294,9 @@ export default function QuoteCalculator({
                 />
               </label>
 
-              <div>
+              {/* The one input that tightens the price band most — keep it the
+                  visually loudest thing in this card. */}
+              <div className="rounded-xl border border-orange-200 bg-orange-50/60 px-4 py-3.5">
                 <FieldLabel>
                   Maße in cm{" "}
                   <span className="font-normal normal-case tracking-normal text-orange-600">
@@ -301,11 +308,15 @@ export default function QuoteCalculator({
                   <DimInput label="Tiefe" value={depth} onChange={setDepth} />
                   <DimInput label="Höhe" value={height} onChange={setHeight} />
                 </div>
+                <p className="mt-2 text-[11px] leading-snug text-stone-500">
+                  Ohne Maße schätzen wir aus den Fotos — mit Maßen wird der Preisrahmen deutlich
+                  enger.
+                </p>
               </div>
             </div>
           </Card>
 
-          <Card step={3} title="Fotos hochladen" hint="Je schärfer, desto enger der Preisrahmen">
+          <Card step={4} title="Fotos hochladen" hint="Je schärfer, desto enger der Preisrahmen">
             <div className="grid gap-5 sm:grid-cols-2">
               <PhotoUpload
                 photos={overviewPhotos}
@@ -327,7 +338,7 @@ export default function QuoteCalculator({
             </p>
           </Card>
 
-          <Card step={4} title="Beschreibung" hint="optional">
+          <Card step={5} title="Beschreibung" hint="optional">
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
@@ -473,6 +484,7 @@ function ResultView({
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showSubmit, setShowSubmit] = useState(false);
+  const [showMaterials, setShowMaterials] = useState(false);
 
   const fabric = getFabric(selection.fabricId);
   const leather = LEATHER_GRADES.find((g) => g.id === selection.leatherGradeId);
@@ -511,8 +523,9 @@ function ResultView({
       <div className="bg-gradient-to-br from-stone-100 via-stone-50 to-stone-100">
         <div className="lg:sticky lg:top-[57px] lg:h-[calc(100vh-57px)] lg:overflow-y-auto">
           {/* One column that actually uses the width it is given: the piece on
-              top, then the evidence it was built from side by side. */}
-          <div className="mx-auto w-full max-w-[860px] px-5 py-6 sm:px-7">
+              top, then the evidence it was built from side by side. The card
+              keeps a reading width so the summary doesn't become a long line. */}
+          <div className="mx-auto w-full max-w-[1120px] px-5 py-6 sm:px-7">
             <PieceStage
               reconstruction={reconstruction}
               outline={estimate.outline}
@@ -532,6 +545,7 @@ function ResultView({
                 meta={result.meta}
                 expanded={showDetails}
                 onToggle={() => setShowDetails((v) => !v)}
+                className="md:max-w-[720px]"
               />
 
               {photos.length > 0 && (
@@ -618,6 +632,7 @@ function ResultView({
               <FabricGrid
                 selectedId={selection.fabricId}
                 onSelect={(id) => onUpdate("fabricId", id)}
+                onOpenLibrary={() => setShowMaterials(true)}
               />
             ) : (
               <div className="space-y-1.5">
@@ -648,6 +663,13 @@ function ResultView({
                     />
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setShowMaterials(true)}
+                  className="w-full cursor-pointer rounded-xl bg-stone-100 px-3 py-2 text-[11px] font-semibold text-stone-700 transition hover:bg-stone-200"
+                >
+                  Alle Materialien ansehen →
+                </button>
               </div>
             )}
           </Section>
@@ -789,6 +811,23 @@ function ResultView({
         </div>
       </aside>
 
+      {showMaterials && (
+        <MaterialPicker
+          materialKind={selection.materialKind}
+          selectedFabricId={selection.fabricId}
+          selectedLeatherId={selection.leatherGradeId}
+          onSelectFabric={(id) => {
+            onUpdate("materialKind", "fabric");
+            onUpdate("fabricId", id);
+          }}
+          onSelectLeather={(id) => {
+            onUpdate("materialKind", "leather");
+            onUpdate("leatherGradeId", id);
+          }}
+          onClose={() => setShowMaterials(false)}
+        />
+      )}
+
       {showSubmit && (
         <SubmitDialog
           quoteCode={result.quoteCode}
@@ -850,11 +889,14 @@ function AnalysisCard({
   meta,
   expanded,
   onToggle,
+  className,
 }: {
   estimate: QuoteResponse["estimate"];
   meta: QuoteResponse["meta"];
   expanded: boolean;
   onToggle: () => void;
+  /** Lets the caller cap the card's width on wide screens. */
+  className?: string;
 }) {
   const hasDetails =
     estimate.difficultyReasons.length > 0 ||
@@ -862,7 +904,9 @@ function AnalysisCard({
     estimate.assumptions.length > 0;
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-stone-200">
+    <div
+      className={`rounded-2xl bg-white p-5 shadow-sm ring-1 ring-stone-200 ${className ?? ""}`}
+    >
       <div className="mb-3 flex items-center justify-between">
         <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
           Das haben wir erkannt
@@ -873,6 +917,39 @@ function AnalysisCard({
       </div>
 
       <p className="text-sm leading-relaxed text-stone-700">{estimate.summary}</p>
+
+      {(estimate.designStyle || estimate.era) && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {estimate.designStyle && (
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-700">
+              {estimate.designStyle}
+            </span>
+          )}
+          {estimate.era && (
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-medium text-stone-700">
+              {estimate.era}
+            </span>
+          )}
+        </div>
+      )}
+
+      {estimate.processSteps.length > 0 && (
+        <div className="mt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-500">
+            Ablauf in der Werkstatt
+          </p>
+          <ol className="mt-1.5 space-y-1">
+            {estimate.processSteps.map((step, i) => (
+              <li key={i} className="flex gap-2 text-[12px] leading-snug text-stone-600">
+                <span aria-hidden className="flex-shrink-0 tabular-nums text-stone-400">
+                  {i + 1}.
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {meta.notice && (
         <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
@@ -973,12 +1050,18 @@ function PriceTier({ value, min, max }: { value: number; min: number; max: numbe
   );
 }
 
+/**
+ * A short row for a quick try, with the full library one click away. Showing
+ * all hundred-odd swatches in a 460 px sidebar helps nobody choose.
+ */
 function FabricGrid({
   selectedId,
   onSelect,
+  onOpenLibrary,
 }: {
   selectedId: string;
   onSelect: (id: string) => void;
+  onOpenLibrary: () => void;
 }) {
   const selected = getFabric(selectedId);
   const prices = UPHOLSTERY_FABRICS.map((f) => f.pricePerMeter);
@@ -988,7 +1071,7 @@ function FabricGrid({
   return (
     <div>
       <div className="flex flex-wrap gap-2">
-        {UPHOLSTERY_FABRICS.map((f) => (
+        {QUICK_FABRICS.map((f) => (
           <button
             key={f.id}
             type="button"
@@ -996,20 +1079,29 @@ function FabricGrid({
             title={`${f.brand} ${f.collection} — ${f.colorName}`}
             aria-label={`${f.brand} ${f.collection}, ${f.colorName}`}
             aria-pressed={selectedId === f.id}
-            className={`h-9 w-9 cursor-pointer overflow-hidden rounded-full border transition ${
-              selectedId === f.id
-                ? "ring-2 ring-orange-500 ring-offset-2"
-                : "border-stone-300 hover:scale-110"
+            className={`cursor-pointer rounded-full transition ${
+              selectedId === f.id ? "ring-2 ring-orange-500 ring-offset-2" : "hover:scale-110"
             }`}
-            style={{ backgroundColor: f.hex }}
           >
-            {f.textureUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={f.textureUrl} alt="" className="h-full w-full object-cover" />
-            )}
+            <Swatch
+              hex={f.hex}
+              material={f.material}
+              textureUrl={f.textureUrl}
+              className="h-9 w-9 rounded-full ring-1 ring-black/10"
+            />
           </button>
         ))}
+
+        <button
+          type="button"
+          onClick={onOpenLibrary}
+          className="flex h-9 cursor-pointer items-center gap-1.5 rounded-full bg-stone-100 px-3.5 text-[11px] font-semibold text-stone-700 transition hover:bg-stone-200"
+        >
+          Alle {UPHOLSTERY_FABRICS.length}
+          <span aria-hidden>→</span>
+        </button>
       </div>
+
       {selected && (
         <p className="mt-2 flex items-center gap-2 text-[11px] text-stone-500">
           <span className="min-w-0 truncate">
@@ -1021,6 +1113,20 @@ function FabricGrid({
     </div>
   );
 }
+
+/**
+ * One colourway per collection, so the quick row spans the range of materials
+ * rather than eleven shades of the same velvet.
+ */
+const QUICK_FABRICS = (() => {
+  const seen = new Set<string>();
+  return UPHOLSTERY_FABRICS.filter((f) => {
+    const key = `${f.brand} ${f.collection}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 10);
+})();
 
 function Card({
   step,
@@ -1102,7 +1208,7 @@ function DimInput({
   onChange: (v: string) => void;
 }) {
   return (
-    <label className="block w-20">
+    <label className="block w-24">
       <input
         type="number"
         inputMode="numeric"
@@ -1112,7 +1218,7 @@ function DimInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={label}
         aria-label={`${label} in cm`}
-        className="w-full rounded-lg border border-stone-200 px-2.5 py-2 text-sm text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-400"
+        className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2.5 text-sm text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-orange-400"
       />
     </label>
   );

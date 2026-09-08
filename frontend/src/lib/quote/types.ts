@@ -52,6 +52,12 @@ export interface QuoteEstimate {
   /** Vector outline of the recognised piece, when the analysis produced one. */
   outline?: QuoteOutline;
   summary: string;
+  /** Design direction of the piece, e.g. "Mid-Century" — read from the photos. */
+  designStyle?: string;
+  /** Era estimate, e.g. "1960er Jahre". */
+  era?: string;
+  /** Customer-friendly steps the workshop will take on this concrete piece. */
+  processSteps: string[];
   assumptions: string[];
   riskFlags: string[];
   followUpQuestions: string[];
