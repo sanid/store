@@ -60,6 +60,9 @@ export default function StoffePage() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return FABRICS.filter((f) => {
+      // This page is the curtain range; the upholstery collections live in the
+      // calculator, where they can be seen on the customer's own piece.
+      if (!f.use.includes("curtain")) return false;
       if (material && f.material !== material) return false;
       if (pattern !== "all" && f.pattern !== pattern) return false;
       if (transparency !== "all" && f.transparency !== transparency) return false;

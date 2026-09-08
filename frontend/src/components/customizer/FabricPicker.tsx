@@ -45,6 +45,9 @@ export default function FabricPicker({ open, selectedId, onClose, onSelect }: Pr
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return FABRICS.filter((f) => {
+      // Upholstery-only material is in the same catalog but cannot be ordered
+      // as a curtain — it belongs to the quote calculator, not here.
+      if (!f.use.includes("curtain")) return false;
       if (brand && f.brand !== brand) return false;
       if (material && f.material !== material) return false;
       if (pattern && f.pattern !== pattern) return false;
