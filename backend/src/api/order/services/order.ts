@@ -11,7 +11,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }: { st
     if (result?.items && !result.orderSummary) {
       const summary = buildOrderSummary(result.items);
       if (summary) {
-        await strapi.documents('api::order.order').update(result.documentId, {
+        await strapi.documents('api::order.order').update({ documentId: result.documentId, 
           data: { orderSummary: summary },
         });
         result.orderSummary = summary;
@@ -25,7 +25,7 @@ export default factories.createCoreService('api::order.order', ({ strapi }: { st
     if (result?.items && !result.orderSummary) {
       const summary = buildOrderSummary(result.items);
       if (summary) {
-        await strapi.documents('api::order.order').update(result.documentId, {
+        await strapi.documents('api::order.order').update({ documentId: result.documentId, 
           data: { orderSummary: summary },
         });
         result.orderSummary = summary;

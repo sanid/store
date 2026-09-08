@@ -406,7 +406,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
         reason: reason === 'requested_by_customer' || reason === 'duplicate' || reason === 'fraudulent' ? reason : undefined,
       });
 
-      await strapi.documents('api::order.order').update(documentId, {
+      await strapi.documents('api::order.order').update({ documentId: documentId, 
         data: { status: 'refunded' },
       });
 
@@ -447,7 +447,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
       }
     }
 
-    await strapi.documents('api::order.order').update(documentId, {
+    await strapi.documents('api::order.order').update({ documentId: documentId, 
       data: { status: 'cancelled' },
     });
 
@@ -485,7 +485,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
       }
     }
 
-    await strapi.documents('api::order.order').update(documentId, {
+    await strapi.documents('api::order.order').update({ documentId: documentId, 
       data: { shippingAddress: next },
     });
 
@@ -726,7 +726,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
               country: a.country || '',
             };
           }
-          await strapi.documents('api::order.order').update(order.documentId, {
+          await strapi.documents('api::order.order').update({ documentId: order.documentId, 
             data: updateData,
           });
 
@@ -812,7 +812,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
           filters: { stripeSessionId: pi.id },
         });
         if (orders.length > 0) {
-          await strapi.documents('api::order.order').update(orders[0].documentId, {
+          await strapi.documents('api::order.order').update({ documentId: orders[0].documentId, 
             data: { status: 'failed' },
           });
         }
@@ -824,7 +824,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
             filters: { stripeSessionId: paymentIntentId },
           });
           if (orders.length > 0) {
-            await strapi.documents('api::order.order').update(orders[0].documentId, {
+            await strapi.documents('api::order.order').update({ documentId: orders[0].documentId, 
               data: { status: 'refunded' },
             });
           }
@@ -915,7 +915,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
       // Rotate the token after a successful download so the link is single-use. If the
       // operator needs to re-download, they re-issue from the admin order detail page.
       try {
-        await strapi.documents('api::order.order').update(documentId, {
+        await strapi.documents('api::order.order').update({ documentId: documentId, 
           data: { productionToken: randomUUID() },
         });
       } catch (e: any) {
@@ -948,7 +948,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
         return ctx.badRequest('Order must be in paid or processing status to add tracking');
       }
 
-      await strapi.documents('api::order.order').update(documentId, {
+      await strapi.documents('api::order.order').update({ documentId: documentId, 
         data: {
           status: 'shipped',
           trackingNumber: trackingNumber.trim(),
@@ -1028,7 +1028,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }: {
         },
       });
 
-      await strapi.documents('api::order.order').update(documentId, {
+      await strapi.documents('api::order.order').update({ documentId: documentId, 
         data: {
           trackingNumber: result.trackingNumber,
           trackingCarrier: 'DHL',

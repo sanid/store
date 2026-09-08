@@ -4,8 +4,62 @@ export default {
   async bootstrap({ strapi }: { strapi: any }) {
     await seedFurniture(strapi);
     await seedCurtain(strapi);
+    await ensureEmployeeRole(strapi);
   },
 };
+
+const EMPLOYEE_ACTIONS = [
+  'api::ops.ops.me',
+  'api::ops.ops.orders',
+  'api::ops.ops.order',
+  'api::ops.ops.orderStatus',
+  'api::ops.ops.orderAddress',
+  'api::ops.ops.orderCancel',
+  'api::ops.ops.orderInvoice',
+  'api::ops.ops.quotes',
+  'api::ops.ops.quote',
+  'api::order.order.refund',
+  'api::order.order.updateTracking',
+  'api::order.order.createDhlLabel',
+  'api::order.order.exportCsv',
+  'api::quote-request.quote-request.opsUpdate',
+  'api::quote-request.quote-request.recalculate',
+  'api::quote-request.quote-request.issueOffer',
+];
+
+async function ensureEmployeeRole(strapi: any) {
+  try {
+    let role = await strapi.query('plugin::users-permissions.role').findOne({
+      where: { type: 'employee' },
+    });
+    if (!role) {
+      role = await strapi.query('plugin::users-permissions.role').create({
+        data: {
+          name: 'Mitarbeiter',
+          description: 'Interner Zugriff auf die Ops-Konsole (Bestellungen, Anfragen, Fulfillment)',
+          type: 'employee',
+        },
+      });
+      strapi.log.info('[seed] Employee role created (type: employee)');
+    }
+
+    const existing = await strapi.query('plugin::users-permissions.permission').findMany({
+      where: { role: role.id },
+    });
+    const have = new Set(existing.map((p: any) => p.action));
+    const missing = EMPLOYEE_ACTIONS.filter((action) => !have.has(action));
+    for (const action of missing) {
+      await strapi.query('plugin::users-permissions.permission').create({
+        data: { action, role: role.id },
+      });
+    }
+    if (missing.length > 0) {
+      strapi.log.info(`[seed] Employee role: granted ${missing.length} ops permissions`);
+    }
+  } catch (err: any) {
+    strapi.log.warn(`[seed] Could not ensure employee role: ${err.message}`);
+  }
+}
 
 async function seedFurniture(strapi: any) {
     const CONFIGURATOR_SLUG = 'custom-furniture-piece';
@@ -76,7 +130,7 @@ async function seedFurniture(strapi: any) {
       const doc = existing[0];
       const schema = doc.customizationSchema as { preset?: string } | null;
       if (schema?.preset !== 'furniture') {
-        await strapi.documents('api::product.product').update(doc.documentId, {
+        await strapi.documents('api::product.product').update({ documentId: doc.documentId, 
           data: {
             featured: true,
             status: 'published',
@@ -84,7 +138,7 @@ async function seedFurniture(strapi: any) {
           },
         });
         try {
-          await strapi.documents('api::product.product').publish(doc.documentId);
+          await strapi.documents('api::product.product').publish({ documentId: doc.documentId });
         } catch {}
         strapi.log.info(`[seed] Updated configurator product schema (documentId: ${doc.documentId})`);
       } else {
@@ -108,7 +162,7 @@ async function seedFurniture(strapi: any) {
       },
     });
 
-    await strapi.documents('api::product.product').publish(product.documentId);
+    await strapi.documents('api::product.product').publish({ documentId: product.documentId });
 
     strapi.log.info(`[seed] Created configurator product (documentId: ${product.documentId})`);
 }
@@ -167,10 +221,10 @@ async function seedCurtain(strapi: any) {
     const doc = existing[0];
     const schema = doc.customizationSchema as { preset?: string } | null;
     if (schema?.preset !== 'curtain') {
-      await strapi.documents('api::product.product').update(doc.documentId, {
+      await strapi.documents('api::product.product').update({ documentId: doc.documentId, 
         data: { featured: false, status: 'published', customizationSchema: SCHEMA },
       });
-      try { await strapi.documents('api::product.product').publish(doc.documentId); } catch {}
+      try { await strapi.documents('api::product.product').publish({ documentId: doc.documentId }); } catch {}
       strapi.log.info(`[seed] Updated curtain product schema (documentId: ${doc.documentId})`);
     } else {
       strapi.log.info(`[seed] Curtain product up to date (documentId: ${doc.documentId})`);
@@ -193,7 +247,7 @@ async function seedCurtain(strapi: any) {
     },
   });
 
-  await strapi.documents('api::product.product').publish(product.documentId);
+  await strapi.documents('api::product.product').publish({ documentId: product.documentId });
 
   strapi.log.info(`[seed] Created curtain product (documentId: ${product.documentId})`);
 }

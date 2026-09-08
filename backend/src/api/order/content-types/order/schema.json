@@ -31,7 +31,7 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["pending", "paid", "processing", "shipped", "delivered", "cancelled", "expired", "failed"],
+      "enum": ["pending", "paid", "processing", "shipped", "delivered", "cancelled", "expired", "failed", "refunded"],
       "default": "pending"
     },
     "items": {
